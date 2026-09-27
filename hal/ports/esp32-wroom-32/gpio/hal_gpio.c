@@ -1,4 +1,5 @@
 #include "hal_gpio_esp32.h"
+#include "port_status.h"
 
 static bool is_valid_config(const hal_gpio_config_t *config) {
     return config != NULL &&

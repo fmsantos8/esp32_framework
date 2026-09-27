@@ -1,6 +1,7 @@
 idf_component_register(
     SRCS
         "gpio/hal_gpio.c"
+        "i2c/hal_i2c.c"
         "timer/hal_timer.c"
         "uart/hal_uart.c"
     INCLUDE_DIRS "." "../../interface"

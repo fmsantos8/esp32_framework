@@ -1,0 +1,3 @@
+[submodule "hal_interface"]
+	path = hal/interface
+	url = git@github.com:fmsantos8/hal_interface.git

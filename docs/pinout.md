@@ -13,7 +13,7 @@
 
 ## Barramento I²C
 
-O SHT31-D e o SSD1306 compartilham `GPIO21` (SDA) e `GPIO22` (SCL) no barramento I²C0 a `100 kHz`. Os endereços I²C de 7 bits são `0x44` para o SHT31-D e `0x3C` para o SSD1306.
+O SHT31-D e o display SSD1306 de `128 × 64` pixels compartilham `GPIO21` (SDA) e `GPIO22` (SCL) no barramento I²C0 a `100 kHz`. Os endereços I²C de 7 bits são `0x44` para o SHT31-D e `0x3C` para o SSD1306.
 
 ## Botão e LED
 

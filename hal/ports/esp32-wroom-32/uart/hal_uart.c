@@ -5,7 +5,7 @@
 
 #include "freertos/FreeRTOS.h"
 
-#define UART_RX_BUFFER_SIZE 256
+#define UART_RX_BUFFER_SIZE   256
 #define UART_TX_FIFO_CAPACITY 128U
 
 static bool is_valid_config(const hal_uart_config_t *config) {
@@ -70,8 +70,7 @@ hal_status_t hal_uart_config(hal_uart_t *uart, const hal_uart_config_t *config) 
 
     bool installed_here = false;
     if (!uart->configured) {
-        if (uart_driver_install(uart->port, UART_RX_BUFFER_SIZE, 0, 0,
-                                NULL, 0) != ESP_OK) {
+        if (uart_driver_install(uart->port, UART_RX_BUFFER_SIZE, 0, 0, NULL, 0) != ESP_OK) {
             return HAL_STATUS_ERROR;
         }
         installed_here = true;
@@ -82,10 +81,10 @@ hal_status_t hal_uart_config(hal_uart_t *uart, const hal_uart_config_t *config) 
             uart_driver_delete(uart->port);
         }
         return err == ESP_FAIL || err == ESP_ERR_NOT_SUPPORTED
-                   ? HAL_STATUS_NOT_SUPPORTED : HAL_STATUS_ERROR;
+                   ? HAL_STATUS_NOT_SUPPORTED
+                   : HAL_STATUS_ERROR;
     }
-    err = uart_set_pin(uart->port, uart->tx_pin, uart->rx_pin,
-                       UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
+    err = uart_set_pin(uart->port, uart->tx_pin, uart->rx_pin, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE);
     if (err != ESP_OK) {
         if (installed_here) {
             uart_driver_delete(uart->port);
@@ -120,7 +119,7 @@ hal_status_t hal_uart_write(hal_uart_t *uart, const uint8_t *data, uint32_t size
 
     /* With no TX ring buffer, at most the hardware FIFO remains in flight. */
     uint32_t timeout_ms = 1000U +
-        (uint32_t)((UART_TX_FIFO_CAPACITY * 12000ULL + uart->baud_rate - 1) /
-                   uart->baud_rate);
+                          (uint32_t)((UART_TX_FIFO_CAPACITY * 12000ULL + uart->baud_rate - 1) /
+                                     uart->baud_rate);
     return hal_esp32_status(uart_wait_tx_done(uart->port, pdMS_TO_TICKS(timeout_ms)));
 }

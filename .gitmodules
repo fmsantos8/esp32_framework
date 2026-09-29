@@ -1,3 +1,6 @@
 [submodule "hal_interface"]
 	path = hal/interface
 	url = git@github.com:fmsantos8/hal_interface.git
+[submodule "hal/ports/esp32-wroom-32"]
+	path = hal/ports/esp32-wroom-32
+	url = git@github.com:fmsantos8/esp32-wroom-32.git

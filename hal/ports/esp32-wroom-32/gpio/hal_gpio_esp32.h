@@ -1,28 +1,22 @@
+/**
+ * @file hal_gpio_esp32.h
+ * @author Fabricio Santos (fmsantos8@ucs.br)
+ * @brief Private GPIO representation copied to and from arena storage.
+ *
+ */
 #ifndef HAL_GPIO_ESP32_H
 #define HAL_GPIO_ESP32_H
-
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-#include <stdbool.h>
-#include <stdint.h>
 
 #include "driver/gpio.h"
 #include "gpio/hal_gpio.h"
 
 /**
- * @brief Concrete GPIO implementation for the ESP32-WROOM-32
- *
+ * @brief Private GPIO snapshot; arena handles are never dereferenced as this type.
  */
 struct hal_gpio {
-    const gpio_num_t pin;           /** GPIO pin number */
-    hal_gpio_direction_t direction; /** GPIO direction (input or output) */
-    bool configured;                /** Whether the GPIO has been configured */
+    gpio_num_t pin;                 /** Physical GPIO index */
+    hal_gpio_direction_t direction; /** Configured digital direction */
+    bool configured;                /** True after successful construction */
 };
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif

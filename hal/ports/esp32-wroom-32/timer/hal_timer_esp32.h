@@ -1,26 +1,22 @@
+/**
+ * @file hal_timer_esp32.h
+ * @author Fabricio Santos (fmsantos8@ucs.br)
+ * @brief Private elapsed-time representation.
+ *
+ */
 #ifndef HAL_TIMER_ESP32_H
 #define HAL_TIMER_ESP32_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #include <stdbool.h>
-
-#include "driver/gptimer.h"
+#include <stdint.h>
 #include "timer/hal_timer.h"
 
 /**
- * @brief Concrete timer implementation for the ESP32-WROOM-32
- *
+ * @brief Snapshot of the system-clock origin for binding zero.
  */
 struct hal_timer {
-    gptimer_handle_t driver; /** Timer handle */
-    bool started;            /** Whether the timer has started */
+    int64_t origin;  /** Monotonic system-clock origin, in microseconds */
+    bool configured; /** True after successful construction */
 };
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif

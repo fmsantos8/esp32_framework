@@ -1,69 +1,64 @@
-#include "hal_timer_esp32.h"
+/**
+ * @file hal_timer.c
+ * @author Fabricio Santos (fmsantos8@ucs.br)
+ * @brief Elapsed milliseconds from the continuously running ESP-IDF clock.
+ *
+ */
+#include "timer/hal_timer_esp32.h"
+#include "port_resources.h"
+#include "framework_memory.h"
+#include "esp_timer.h"
 
-#include "esp_err.h"
+#include <string.h>
 
-#define TIMER_RESOLUTION_HZ 1000000U
+static bool assigned;
 
-hal_status_t hal_timer_start(hal_timer_t *timer) {
-    if (timer == NULL) {
-        return HAL_STATUS_INVALID_PARAM;
+hal_status_t hal_timer_config(const hal_timer_config_t *config, hal_timer_t **out_timer)
+{
+    if (out_timer == NULL) {
+        return HAL_STATUS_INVALID_ARGUMENT;
     }
-    if (timer->started) {
-        return HAL_STATUS_OK;
+    *out_timer = NULL;
+    if (config == NULL || config->instance != 0) {
+        return HAL_STATUS_INVALID_ARGUMENT;
     }
-
-    gptimer_config_t config = {
-        .clk_src = GPTIMER_CLK_SRC_DEFAULT,
-        .direction = GPTIMER_COUNT_UP,
-        .resolution_hz = TIMER_RESOLUTION_HZ,
-    };
-    gptimer_handle_t driver = NULL;
-    esp_err_t err = gptimer_new_timer(&config, &driver);
-    if (err != ESP_OK) {
-        return err == ESP_ERR_INVALID_ARG ? HAL_STATUS_NOT_SUPPORTED
-                                          : HAL_STATUS_ERROR;
+    hal_status_t status = hal_esp32_check_startup();
+    if (status != HAL_STATUS_OK) {
+        return status;
     }
-
-    uint32_t resolution;
-    if (gptimer_get_resolution(driver, &resolution) != ESP_OK) {
-        gptimer_del_timer(driver);
+    if (assigned) {
+        return HAL_STATUS_RESOURCE_BUSY;
+    }
+    const int64_t origin = esp_timer_get_time();
+    if (origin < 0) {
         return HAL_STATUS_ERROR;
     }
-    if (resolution != TIMER_RESOLUTION_HZ) {
-        gptimer_del_timer(driver);
-        return HAL_STATUS_NOT_SUPPORTED;
+    void *storage = NULL;
+    status = framework_memory_allocate(sizeof(hal_timer_t), _Alignof(hal_timer_t), &storage);
+    if (status != HAL_STATUS_OK) {
+        return status;
     }
-    if (gptimer_set_raw_count(driver, 0) != ESP_OK) {
-        gptimer_del_timer(driver);
-        return HAL_STATUS_ERROR;
-    }
-    if (gptimer_enable(driver) != ESP_OK) {
-        gptimer_del_timer(driver);
-        return HAL_STATUS_ERROR;
-    }
-    if (gptimer_start(driver) != ESP_OK) {
-        gptimer_disable(driver);
-        gptimer_del_timer(driver);
-        return HAL_STATUS_ERROR;
-    }
-
-    timer->driver = driver;
-    timer->started = true;
+    const hal_timer_t object = {.origin = origin, .configured = true};
+    memcpy(storage, &object, sizeof(object));
+    assigned = true;
+    *out_timer = storage;
     return HAL_STATUS_OK;
 }
 
-hal_status_t hal_timer_get_millis(hal_timer_t *timer, uint32_t *millis) {
-    if (timer == NULL || millis == NULL) {
-        return HAL_STATUS_INVALID_PARAM;
+hal_status_t hal_timer_read(hal_timer_t *timer, uint32_t *elapsed_time)
+{
+    if (timer == NULL || elapsed_time == NULL) {
+        return HAL_STATUS_INVALID_ARGUMENT;
     }
-    if (!timer->started) {
+    hal_timer_t object;
+    memcpy(&object, timer, sizeof(object));
+    if (!object.configured) {
+        return HAL_STATUS_NOT_INITIALIZED;
+    }
+    const int64_t current_time = esp_timer_get_time();
+    if (current_time < object.origin) {
         return HAL_STATUS_ERROR;
     }
-
-    uint64_t count;
-    if (gptimer_get_raw_count(timer->driver, &count) != ESP_OK) {
-        return HAL_STATUS_ERROR;
-    }
-    *millis = (uint32_t)(count / (TIMER_RESOLUTION_HZ / 1000U));
+    *elapsed_time = (uint32_t)((uint64_t)(current_time - object.origin) / 1000);
     return HAL_STATUS_OK;
 }

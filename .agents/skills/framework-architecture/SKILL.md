@@ -36,13 +36,23 @@ O TCC cita os componentes como artefatos previstos. Os detalhes de suas APIs ain
 ## Regras de fronteira
 
 1. `app/` e `components/` não incluem headers do BSP, dos portes ou do SDK. Seus dados de placa chegam por parâmetros e handles; recursos compartilhados, como o barramento I2C do SHT31-D e do SSD1306, são injetados pela integração.
-2. Cabeçalhos de `hal/interface/` não expõem tipos do fabricante. O porte implementa os símbolos `hal_*` declarados nesses cabeçalhos; cabeçalhos específicos do porte definem os tipos concretos dos handles para BSP/integração.
+2. Cabeçalhos de `hal/interface/` não expõem tipos do fabricante. O porte implementa os símbolos `hal_*` declarados nesses cabeçalhos; as representações concretas ficam privadas ao porte. Os construtores recebem a configuração completa, incluindo pinos, e devolvem handles; BSP e integração não instanciam essas estruturas.
 3. O BSP escolhe **qual** recurso físico representa uma função da placa; o porte define **como** executar uma operação comum nesse recurso. Decisões sobre clocks, pinos e compilação permanecem na região específica da placa/plataforma.
 4. A composição pode conhecer todas as partes para conectá-las, mas as decisões de produto ficam na aplicação. A execução das tarefas pode ser um laço principal ou um mecanismo da plataforma; não há abstração comum de RTOS.
-5. A configuração inicial de baixo nível cabe ao BSP/integração. Os cabeçalhos atuais também expõem configuração portável de GPIO, I2C e UART: eventual reconfiguração em execução usa esses contratos, sem acesso do componente ao BSP ou SDK. O dono da política e a coordenação do recurso compartilhado devem ser definidos no caso concreto.
-6. Use o Doxygen do cabeçalho público para assinaturas e semântica vigentes. A proposta do TCC menciona, por exemplo, limites de tempo explícitos em I2C/UART, mas os cabeçalhos atuais não recebem esse parâmetro; trate isso como diferença entre proposta e implementação, não como contrato já existente.
+5. A configuração inicial de baixo nível cabe ao BSP/integração. Os construtores portáveis de GPIO, I2C, UART e timer são usados apenas durante a inicialização sequencial, entre `framework_memory_init()` e `framework_memory_seal()`. Os handles permanecem válidos durante toda a execução; não há destruição nem reconfiguração em runtime.
+6. Use o Doxygen do cabeçalho público para assinaturas e semântica vigentes. I2C e UART recebem `timeout`, em milissegundos, na configuração do objeto; as transferências não recebem esse parâmetro. O contrato não garante prazo total rígido por chamada. Portes com limite fixo verificam na construção a correspondência com a configuração de compilação. Consulte `docs/contracts.md` para versões, capacidades e limites do ESP32.
 7. Não suponha concorrência segura ou chamadas de ISR nos contratos comuns. Quando necessárias, a integração da plataforma deve coordenar o acesso; a proposta atribui à aplicação a serialização do I2C compartilhado.
 
 ## Estado desta árvore
 
-O projeto atual contém `hal/interface/` (submódulo), o porte `hal/ports/esp32-wroom-32/`, `bsp/bsp_esp32.c` e `main/main.c`. O BSP ainda é um esqueleto. `main/main.c` concentra uma prova inicial do ESP32, incluindo mapeamento de pinos, comunicação com SHT31-D/SSD1306 e chamadas diretas do FreeRTOS. `app/` e `components/` ainda não existem nesta árvore. Ao evoluir para a arquitetura proposta, redistribuir essas responsabilidades conforme as fronteiras acima; não tratar o teste atual como desenho final.
+O projeto contém `hal/interface/` (submódulo mantido com alterações locais), o porte `hal/ports/esp32-wroom-32/`, a arena compartilhada `memory/`, o BSP e o teste de integração em `main/main.c`. O BSP constrói os recursos usando apenas interfaces públicas. A integração verifica versões e capacidades, abre a arena, inicializa o BSP e sela as alocações. Os objetos são armazenados em bytes alinhados e acessados por `memcpy` através de estruturas locais tipadas, sem acesso direto às estruturas na arena.
+
+`app/` e `components/` ainda não existem: o escopo desta migração preserva o teste atual, incluindo aquisição bloqueante, uma tela e o LED seguindo o botão. Isso não constitui a prova de conceito completa da proposta. Os testes de host em `tests/` verificam contratos com um SDK simulado; a montagem física e os outros portes ainda precisam de validação.
+
+## Convenções de documentação
+
+Escreva os comentários Doxygen em inglês. Use blocos multilinha antes de tipos, funções, macros e outras declarações, com `@brief` quando houver uma descrição. Valores de enumerações e campos de estruturas recebem comentários alinhados depois do membro, na mesma linha, no formato literal `/** Description */`, sem `@brief` e sem `<`, conforme a preferência explícita do usuário. Documente as unidades no texto dos comentários.
+
+O cabeçalho Doxygen no topo de cada arquivo C ou H usa `@file`, `@author Fabricio Santos (fmsantos8@ucs.br)`, `@brief` e uma linha vazia antes de `*/`. Não use agrupamentos Doxygen (`@defgroup`, `@ingroup`, `@{`, `@}`). Preserve as regras técnicas dos contratos na documentação das declarações correspondentes. Separe os grupos de descrição, parâmetros (`@param`) e resultados (`@retval` ou `@return`) com uma linha vazia no bloco.
+
+Não há cabeçalho agregador da HAL. Cada consumidor inclui explicitamente os contratos utilizados. Resolva includes a partir das raízes públicas ou privadas configuradas na compilação, como `common/hal_contract.h` e `gpio/hal_gpio.h`; não use `../` ou `./` em diretivas `#include`.

@@ -1,0 +1,9 @@
+menu "TCC framework"
+    config FRAMEWORK_MEMORY_CAPACITY
+        int "Static HAL object arena capacity (bytes)"
+        range 1 1048576
+        default 1024
+        help
+            Shared startup-only storage for opaque HAL objects, including padding.
+            SDK-owned driver allocations are separate from this arena.
+endmenu

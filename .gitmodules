@@ -4,3 +4,6 @@
 [submodule "hal/ports/esp32-wroom-32"]
 	path = hal/ports/esp32-wroom-32
 	url = git@github.com:fmsantos8/esp32-wroom-32.git
+[submodule "hal/memory"]
+	path = hal/memory
+	url = git@github.com:fmsantos8/memory.git

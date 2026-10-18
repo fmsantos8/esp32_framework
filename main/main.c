@@ -47,11 +47,11 @@ static bool report_status(const char *step, hal_status_t status) {
 
 /* Electrical levels and I2C addresses of the current test assembly. */
 static bool button_active_level(void) {
-    return false; /* External pull-up; pressed button connects to GND. */
+    return false; // External pull-up; pressed button connects to GND.
 }
 
 static bool led_active_level(void) {
-    return true; /* LED anode is connected to GPIO19. */
+    return true; // LED anode is connected to GPIO19.
 }
 
 static uint8_t sht31_address(void) {

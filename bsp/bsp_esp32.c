@@ -22,7 +22,7 @@ static hal_timer_t timer;
 static hal_status_t init_button(void) {
     const hal_gpio_config_t config = {
         .direction = HAL_GPIO_DIRECTION_INPUT,
-        .pull = HAL_GPIO_PULL_NONE, /* External 10 kOhm pull-up. */
+        .pull = HAL_GPIO_PULL_NONE, // External 10 kOhm pull-up.
     };
     return hal_gpio_config(&button, &config);
 }
@@ -32,7 +32,7 @@ static hal_status_t init_led(void) {
         .direction = HAL_GPIO_DIRECTION_OUTPUT,
         .pull = HAL_GPIO_PULL_NONE,
     };
-    /* The HAL drives this active-high LED low during configuration. */
+    // The HAL drives this active-high LED low during configuration.
     return hal_gpio_config(&led, &config);
 }
 

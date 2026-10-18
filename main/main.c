@@ -1,11 +1,16 @@
+#include <stdarg.h>
+#include <stdatomic.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-#include "bsp_esp32.h"
+#include "bsp.h"
+#include "esp_attr.h"
+#include "system/hal_system.h"
 
 enum {
     OLED_WIDTH = 128,
@@ -14,7 +19,7 @@ enum {
 #define OLED_LINE_CHARS   10
 #define MEASURE_PERIOD_MS 2000
 
-// Only the characters used by this visual test are needed (5x7, bit 0 at top).
+/** @brief Characters used by the visual test (5x7, bit 0 at top). */
 static const uint8_t font[128][5] = {
     ['%'] = {0x63, 0x13, 0x08, 0x64, 0x63},
     ['-'] = {0x08, 0x08, 0x08, 0x08, 0x08},
@@ -40,26 +45,41 @@ static const uint8_t font[128][5] = {
     ['U'] = {0x3F, 0x40, 0x40, 0x40, 0x3F},
 };
 
+/** @brief Persistent storage shared by all HAL resource constructors. */
+_Alignas(max_align_t) static unsigned char hal_storage[1024];
+
+/** @brief Resources supplied by the selected board for the visual test. */
+static bsp_resources_t board;
+
+/** @brief Serviced one-millisecond timer notifications, independent of wall time. */
+static _Atomic uint32_t timer_notifications;
+
+_Static_assert(ATOMIC_INT_LOCK_FREE == 2, "Timer callback requires lock-free atomic counter");
+
+static void IRAM_ATTR timer_tick(void) {
+    atomic_fetch_add_explicit(&timer_notifications, 1, memory_order_relaxed);
+}
+
+static void __attribute__((format(printf, 1, 2))) telemetry_printf(const char *format, ...) {
+    char message[256];
+    va_list arguments;
+    va_start(arguments, format);
+    int length = vsnprintf(message, sizeof(message), format, arguments);
+    va_end(arguments);
+    if (length <= 0) {
+        return;
+    }
+    uint32_t size = (uint32_t)length;
+    if (size >= sizeof(message)) {
+        size = (uint32_t)sizeof(message) - 1;
+    }
+    uint32_t transmitted;
+    hal_uart_write(board.telemetry_uart, (const uint8_t *)message, size, &transmitted);
+}
+
 static bool report_status(const char *step, hal_status_t status) {
-    printf("%s: %s (status %d)\n", step, status == HAL_STATUS_OK ? "OK" : "FALHOU", status);
+    telemetry_printf("%s: %s (status %d)\n", step, status == HAL_STATUS_OK ? "OK" : "FALHOU", status);
     return status == HAL_STATUS_OK;
-}
-
-/* Electrical levels and I2C addresses of the current test assembly. */
-static bool button_active_level(void) {
-    return false; // External pull-up; pressed button connects to GND.
-}
-
-static bool led_active_level(void) {
-    return true; // LED anode is connected to GPIO19.
-}
-
-static uint8_t sht31_address(void) {
-    return 0x44;
-}
-
-static uint8_t ssd1306_address(void) {
-    return 0x3C;
 }
 
 static uint8_t sht31_crc(const uint8_t *bytes) {
@@ -77,7 +97,7 @@ static uint8_t sht31_crc(const uint8_t *bytes) {
 static bool sht31_measure(int32_t *temperature_tenths, uint32_t *humidity_tenths) {
     // Single-shot measurement, high repeatability, without clock stretching.
     const uint8_t command[] = {0x24, 0x00};
-    hal_status_t status = hal_i2c_write(bsp_esp32_get_i2c(), sht31_address(), command, sizeof(command));
+    hal_status_t status = hal_i2c_write(board.devices_i2c, board.sht31_address, command, sizeof(command));
     if (status != HAL_STATUS_OK) {
         report_status("SHT31: comando de medicao", status);
         return false;
@@ -85,14 +105,14 @@ static bool sht31_measure(int32_t *temperature_tenths, uint32_t *humidity_tenths
 
     vTaskDelay(pdMS_TO_TICKS(30));
     uint8_t sample[6];
-    status = hal_i2c_read(bsp_esp32_get_i2c(), sht31_address(), sample, sizeof(sample));
+    status = hal_i2c_read(board.devices_i2c, board.sht31_address, sample, sizeof(sample));
     if (status != HAL_STATUS_OK) {
         report_status("SHT31: leitura", status);
         return false;
     }
     if (sht31_crc(sample) != sample[2] ||
         sht31_crc(sample + 3) != sample[5]) {
-        printf("SHT31: CRC FALHOU\n");
+        telemetry_printf("SHT31: CRC FALHOU\n");
         return false;
     }
 
@@ -105,11 +125,11 @@ static bool sht31_measure(int32_t *temperature_tenths, uint32_t *humidity_tenths
 
 static hal_status_t oled_write_page(uint8_t page, const uint8_t data[OLED_WIDTH + 1]) {
     const uint8_t address[] = {0x00, (uint8_t)(0xB0 | page), 0x00, 0x10};
-    hal_status_t status = hal_i2c_write(bsp_esp32_get_i2c(), ssd1306_address(), address, sizeof(address));
+    hal_status_t status = hal_i2c_write(board.devices_i2c, board.ssd1306_address, address, sizeof(address));
     if (status != HAL_STATUS_OK) {
         return status;
     }
-    return hal_i2c_write(bsp_esp32_get_i2c(), ssd1306_address(), data, OLED_WIDTH + 1);
+    return hal_i2c_write(board.devices_i2c, board.ssd1306_address, data, OLED_WIDTH + 1);
 }
 
 static hal_status_t oled_init(void) {
@@ -142,7 +162,7 @@ static hal_status_t oled_init(void) {
         0xA4,
         0xA6,
     };
-    hal_status_t status = hal_i2c_write(bsp_esp32_get_i2c(), ssd1306_address(), init, sizeof(init));
+    hal_status_t status = hal_i2c_write(board.devices_i2c, board.ssd1306_address, init, sizeof(init));
     if (status != HAL_STATUS_OK) {
         return status;
     }
@@ -155,7 +175,7 @@ static hal_status_t oled_init(void) {
         }
     }
     const uint8_t display_on[] = {0x00, 0xAF};
-    return hal_i2c_write(bsp_esp32_get_i2c(), ssd1306_address(), display_on, sizeof(display_on));
+    return hal_i2c_write(board.devices_i2c, board.ssd1306_address, display_on, sizeof(display_on));
 }
 
 static hal_status_t oled_write_line(uint8_t first_page, const char *text) {
@@ -207,12 +227,12 @@ static void update_measurement(bool display_ready) {
     }
 
     int32_t magnitude = temperature < 0 ? -temperature : temperature;
-    printf("SHT31: %s%ld.%ld C, %lu.%lu %% UR\n",
-           temperature < 0 ? "-" : "",
-           (long)(magnitude / 10),
-           (long)(magnitude % 10),
-           (unsigned long)(humidity / 10),
-           (unsigned long)(humidity % 10));
+    telemetry_printf("SHT31: %s%ld.%ld C, %lu.%lu %% UR\n",
+                     temperature < 0 ? "-" : "",
+                     (long)(magnitude / 10),
+                     (long)(magnitude % 10),
+                     (unsigned long)(humidity / 10),
+                     (unsigned long)(humidity % 10));
     if (display_ready) {
         char temperature_line[32];
         char humidity_line[32];
@@ -226,38 +246,40 @@ static void update_measurement(bool display_ready) {
 }
 
 void app_main(void) {
-    bsp_esp32_init();
+    const hal_system_config_t config = {
+        .memory_buffer = hal_storage,
+        .memory_capacity = (uint32_t)sizeof(hal_storage),
+    };
+    if (hal_system_init(&config) != HAL_STATUS_OK || bsp_init(timer_tick, &board) != HAL_STATUS_OK ||
+        hal_system_seal() != HAL_STATUS_OK) {
+        return;
+    }
 
     static const uint8_t message[] = "UART0: transmissao pelo port OK\r\n";
+    uint32_t transmitted;
     report_status("UART0: transmissao",
-                  hal_uart_write(bsp_esp32_get_uart(), message, sizeof(message) - 1));
+                  hal_uart_write(board.telemetry_uart, message, (uint32_t)sizeof(message) - 1, &transmitted));
 
-    uint32_t before;
-    uint32_t after;
-    if (report_status("Timer: primeira leitura",
-                      hal_timer_get_millis(bsp_esp32_get_timer(), &before))) {
+    if (report_status("Timer: iniciar", hal_timer_start(board.timebase_timer))) {
+        uint32_t before = atomic_load_explicit(&timer_notifications, memory_order_relaxed);
         vTaskDelay(pdMS_TO_TICKS(30));
-        if (report_status("Timer: segunda leitura",
-                          hal_timer_get_millis(bsp_esp32_get_timer(), &after))) {
-            printf("Timer: %s (%lu ms decorridos)\n",
-                   (uint32_t)(after - before) >= 10 ? "OK" : "FALHOU",
-                   (unsigned long)(uint32_t)(after - before));
-        }
+        uint32_t after = atomic_load_explicit(&timer_notifications, memory_order_relaxed);
+        telemetry_printf("Timer: %s (%lu notificacoes de periodo nominal 1 ms)\n",
+                         after != before ? "OK" : "FALHOU",
+                         (unsigned long)(uint32_t)(after - before));
     }
 
     bool button_ready = true;
     bool led_ready = report_status("GPIO19: acender LED",
-                                   hal_gpio_write(bsp_esp32_get_led(),
-                                                  led_active_level()));
+                                   hal_gpio_write(board.led, board.led_active_level));
     vTaskDelay(pdMS_TO_TICKS(200));
     led_ready = report_status("GPIO19: apagar LED",
-                              hal_gpio_write(bsp_esp32_get_led(),
-                                             !led_active_level())) &&
+                              hal_gpio_write(board.led, !board.led_active_level)) &&
                 led_ready;
 
     bool display_ready = report_status("SSD1306: inicializacao", oled_init());
 
-    printf("Pressione o botao: o LED deve acender; solte para apagar.\n");
+    telemetry_printf("Pressione o botao: o LED deve acender; solte para apagar.\n");
     bool last_pressed = false;
     bool has_sample = false;
     TickType_t last_measurement = xTaskGetTickCount() - pdMS_TO_TICKS(MEASURE_PERIOD_MS);
@@ -271,19 +293,19 @@ void app_main(void) {
 
         if (button_ready) {
             bool level;
-            hal_status_t status = hal_gpio_read(bsp_esp32_get_button(), &level);
+            hal_status_t status = hal_gpio_read(board.button, &level);
             if (status != HAL_STATUS_OK) {
                 report_status("GPIO18: leitura", status);
                 button_ready = false;
             } else {
-                bool pressed = level == button_active_level();
+                bool pressed = level == board.button_active_level;
                 if (!has_sample || pressed != last_pressed) {
-                    printf("Botao: %s\n", pressed ? "pressionado" : "solto");
+                    telemetry_printf("Botao: %s\n", pressed ? "pressionado" : "solto");
                     last_pressed = pressed;
                     has_sample = true;
                 }
                 if (led_ready) {
-                    status = hal_gpio_write(bsp_esp32_get_led(), pressed ? led_active_level() : !led_active_level());
+                    status = hal_gpio_write(board.led, pressed ? board.led_active_level : !board.led_active_level);
                     if (status != HAL_STATUS_OK) {
                         report_status("GPIO19: escrita", status);
                         led_ready = false;

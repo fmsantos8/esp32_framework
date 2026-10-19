@@ -10,6 +10,7 @@
 
 #include "bsp.h"
 #include "esp_attr.h"
+#include "sht31_config.h"
 #include "ssd1306_config.h"
 #include "system/hal_system.h"
 
@@ -90,6 +91,9 @@ static const uint8_t drop_pixels[] = {
 /** @brief Component storage supplied by the composition, outside the HAL arena. */
 static ssd1306_t display;
 
+/** @brief Sensor context supplied by the composition, sharing the display bus. */
+static sht31_t sensor;
+
 /** @brief Last successful values, or placeholders before the first acquisition. */
 static char temperature_text[16] = "--,-";
 static char humidity_text[16] = "--,-";
@@ -131,45 +135,9 @@ static bool report_status(const char *step, hal_status_t status) {
     return status == HAL_STATUS_OK;
 }
 
-static uint8_t sht31_crc(const uint8_t *bytes) {
-    uint8_t crc = 0xFF;
-    for (int i = 0; i < 2; ++i) {
-        crc ^= bytes[i];
-        for (int bit = 0; bit < 8; ++bit) {
-            crc = (crc & 0x80) ? (uint8_t)((crc << 1) ^ 0x31)
-                               : (uint8_t)(crc << 1);
-        }
-    }
-    return crc;
-}
-
-static bool sht31_measure(int32_t *temperature_tenths, uint32_t *humidity_tenths) {
-    // Single-shot measurement, high repeatability, without clock stretching.
-    const uint8_t command[] = {0x24, 0x00};
-    hal_status_t status = hal_i2c_write(board.devices_i2c, board.sht31_address, command, sizeof(command));
-    if (status != HAL_STATUS_OK) {
-        report_status("SHT31: comando de medicao", status);
-        return false;
-    }
-
-    vTaskDelay(pdMS_TO_TICKS(30));
-    uint8_t sample[6];
-    status = hal_i2c_read(board.devices_i2c, board.sht31_address, sample, sizeof(sample));
-    if (status != HAL_STATUS_OK) {
-        report_status("SHT31: leitura", status);
-        return false;
-    }
-    if (sht31_crc(sample) != sample[2] ||
-        sht31_crc(sample + 3) != sample[5]) {
-        telemetry_printf("SHT31: CRC FALHOU\n");
-        return false;
-    }
-
-    uint16_t raw_temperature = ((uint16_t)sample[0] << 8) | sample[1];
-    uint16_t raw_humidity = ((uint16_t)sample[3] << 8) | sample[4];
-    *temperature_tenths = -450 + (int32_t)((1750UL * raw_temperature + 32767UL) / 65535UL);
-    *humidity_tenths = (1000UL * raw_humidity + 32767UL) / 65535UL;
-    return true;
+static bool report_sensor_status(const char *step, sht31_status_t status) {
+    telemetry_printf("%s: %s (sht31 status %d)\n", step, status == SHT31_STATUS_OK ? "OK" : "FALHOU", status);
+    return status == SHT31_STATUS_OK;
 }
 
 static bool report_display_status(const char *step, ssd1306_status_t status) {
@@ -232,18 +200,21 @@ static ssd1306_status_t draw_readings(bool sample_error) {
     return SSD1306_STATUS_OK;
 }
 
-static void update_measurement(bool display_ready) {
-    int32_t temperature;
-    uint32_t humidity;
-    if (!sht31_measure(&temperature, &humidity)) {
-        if (display_ready) {
-            ssd1306_status_t status = draw_readings(true);
-            if (status != SSD1306_STATUS_OK) {
-                report_display_status("SSD1306: desenho", status);
-            }
+static void report_measurement_failure(const char *step, sht31_status_t status, bool display_ready) {
+    report_sensor_status(step, status);
+    if (display_ready) {
+        ssd1306_status_t drawing_status = draw_readings(true);
+        if (drawing_status != SSD1306_STATUS_OK) {
+            report_display_status("SSD1306: desenho", drawing_status);
         }
-        return;
     }
+}
+
+static void update_measurement(const sht31_sample_t *sample, bool display_ready) {
+    // Round only for presentation; the component preserves millidegree resolution.
+    int32_t temperature = sample->temperature_millicelsius;
+    temperature = (temperature + (temperature < 0 ? -50 : 50)) / 100;
+    uint32_t humidity = (sample->humidity_millipercent + 50U) / 100U;
 
     int32_t magnitude = temperature < 0 ? -temperature : temperature;
     telemetry_printf("SHT31: %s%ld.%ld C, %lu.%lu %% UR\n",
@@ -294,6 +265,12 @@ void app_main(void) {
                               hal_gpio_write(board.led, !board.led_active_level)) &&
                 led_ready;
 
+    const sht31_config_t sensor_config = {
+        .i2c = board.devices_i2c,
+        .address = board.sht31_address,
+    };
+    bool sensor_ready = report_sensor_status("SHT31: inicializacao", sht31_init(&sensor, &sensor_config));
+
     const ssd1306_config_t display_config = {
         .i2c = board.devices_i2c,
         .address = board.ssd1306_address,
@@ -301,7 +278,7 @@ void app_main(void) {
     bool display_ready = report_display_status("SSD1306: inicializacao", ssd1306_init(&display, &display_config));
     if (display_ready) {
         display_ready = report_display_status("SSD1306: layout", draw_readings_layout()) &&
-                        report_display_status("SSD1306: valores iniciais", draw_readings(false));
+                        report_display_status("SSD1306: valores iniciais", draw_readings(!sensor_ready));
     }
     bool display_waiting_retry = false;
     TickType_t last_display_failure = 0;
@@ -309,15 +286,47 @@ void app_main(void) {
     telemetry_printf("Pressione o botao: o LED deve acender; solte para apagar.\n");
     bool last_pressed = false;
     bool has_sample = false;
-    TickType_t last_measurement = xTaskGetTickCount() - pdMS_TO_TICKS(MEASURE_PERIOD_MS);
+    TickType_t last_measurement = xTaskGetTickCount() - (sensor_ready ? pdMS_TO_TICKS(MEASURE_PERIOD_MS) : 0);
+    TickType_t measurement_started = 0;
+    bool measurement_pending = false;
+    // Round up and allow one additional tick for the unknown phase of the clock.
+    const TickType_t conversion_ticks = pdMS_TO_TICKS(SHT31_MEASUREMENT_TIME_MS) + 2U;
     while (true) {
         TickType_t now = xTaskGetTickCount();
-        if ((TickType_t)(now - last_measurement) >=
-            pdMS_TO_TICKS(MEASURE_PERIOD_MS)) {
+        if (!measurement_pending && (TickType_t)(now - last_measurement) >= pdMS_TO_TICKS(MEASURE_PERIOD_MS)) {
             last_measurement = now;
-            update_measurement(display_ready);
+            if (!sensor_ready) {
+                sht31_status_t status = sht31_init(&sensor, &sensor_config);
+                sensor_ready = status == SHT31_STATUS_OK;
+                if (!sensor_ready) {
+                    report_measurement_failure("SHT31: inicializacao", status, display_ready);
+                }
+            }
+            if (sensor_ready) {
+                sht31_status_t status = sht31_start_measurement(&sensor);
+                if (status == SHT31_STATUS_OK) {
+                    // Capture time after the synchronous command has completed.
+                    measurement_started = xTaskGetTickCount();
+                    measurement_pending = true;
+                } else {
+                    report_measurement_failure("SHT31: comando de medicao", status, display_ready);
+                }
+            }
         }
 
+        now = xTaskGetTickCount();
+        if (measurement_pending && (TickType_t)(now - measurement_started) >= conversion_ticks) {
+            sht31_sample_t sample;
+            sht31_status_t status = sht31_read_measurement(&sensor, &sample);
+            measurement_pending = false;
+            if (status == SHT31_STATUS_OK) {
+                update_measurement(&sample, display_ready);
+            } else {
+                report_measurement_failure("SHT31: leitura", status, display_ready);
+            }
+        }
+
+        now = xTaskGetTickCount();
         if (display_ready && (!display_waiting_retry ||
                               (TickType_t)(now - last_display_failure) >= pdMS_TO_TICKS(MEASURE_PERIOD_MS))) {
             // Limit each iteration to one synchronous page; retry failures after 2 s.

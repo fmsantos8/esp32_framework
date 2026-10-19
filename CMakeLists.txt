@@ -13,6 +13,8 @@ if(DEFINED COMPONENT_NAME AND "${COMPONENT_DIR}" STREQUAL "${CMAKE_CURRENT_LIST_
         SRCS
             "main/main.c"
             "bsp/esp32_devkit_v1/bsp.c"
+            "components/ssd1306/ssd1306.c"
+            "components/ssd1306/ssd1306_fonts.c"
             "hal/ports/esp32-wroom-32/hal_esp32.c"
             "hal/ports/esp32-wroom-32/system/hal_system.c"
             "hal/ports/esp32-wroom-32/gpio/hal_gpio.c"
@@ -20,7 +22,7 @@ if(DEFINED COMPONENT_NAME AND "${COMPONENT_DIR}" STREQUAL "${CMAKE_CURRENT_LIST_
             "hal/ports/esp32-wroom-32/uart/hal_uart.c"
             "hal/ports/esp32-wroom-32/timer/hal_timer.c"
             "${HAL_ESP32_MEMORY_DIR}/hal_memory.c"
-        INCLUDE_DIRS "bsp" "${HAL_ESP32_INTERFACE_DIR}"
+        INCLUDE_DIRS "bsp" "components/ssd1306" "${HAL_ESP32_INTERFACE_DIR}"
         PRIV_INCLUDE_DIRS "hal/ports/esp32-wroom-32" "${HAL_ESP32_MEMORY_DIR}"
         PRIV_REQUIRES
             esp_driver_gpio esp_driver_i2c esp_driver_uart esp_driver_gptimer

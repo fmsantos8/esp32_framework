@@ -10,40 +10,89 @@
 
 #include "bsp.h"
 #include "esp_attr.h"
+#include "ssd1306_config.h"
 #include "system/hal_system.h"
 
-enum {
-    OLED_WIDTH = 128,
-    OLED_PAGES = 64 / 8,
-};
-#define OLED_LINE_CHARS   10
 #define MEASURE_PERIOD_MS 2000
 
-/** @brief Characters used by the visual test (5x7, bit 0 at top). */
-static const uint8_t font[128][5] = {
-    ['%'] = {0x63, 0x13, 0x08, 0x64, 0x63},
-    ['-'] = {0x08, 0x08, 0x08, 0x08, 0x08},
-    ['.'] = {0x00, 0x60, 0x60, 0x00, 0x00},
-    ['0'] = {0x3E, 0x51, 0x49, 0x45, 0x3E},
-    ['1'] = {0x00, 0x42, 0x7F, 0x40, 0x00},
-    ['2'] = {0x42, 0x61, 0x51, 0x49, 0x46},
-    ['3'] = {0x21, 0x41, 0x45, 0x4B, 0x31},
-    ['4'] = {0x18, 0x14, 0x12, 0x7F, 0x10},
-    ['5'] = {0x27, 0x45, 0x45, 0x45, 0x39},
-    ['6'] = {0x3C, 0x4A, 0x49, 0x49, 0x30},
-    ['7'] = {0x01, 0x71, 0x09, 0x05, 0x03},
-    ['8'] = {0x36, 0x49, 0x49, 0x49, 0x36},
-    ['9'] = {0x06, 0x49, 0x49, 0x29, 0x1E},
-    [':'] = {0x00, 0x36, 0x36, 0x00, 0x00},
-    ['C'] = {0x3E, 0x41, 0x41, 0x41, 0x22},
-    ['E'] = {0x7F, 0x49, 0x49, 0x49, 0x41},
-    ['H'] = {0x7F, 0x08, 0x08, 0x08, 0x7F},
-    ['O'] = {0x3E, 0x41, 0x41, 0x41, 0x3E},
-    ['R'] = {0x7F, 0x09, 0x19, 0x29, 0x46},
-    ['S'] = {0x26, 0x49, 0x49, 0x49, 0x32},
-    ['T'] = {0x01, 0x01, 0x7F, 0x01, 0x01},
-    ['U'] = {0x3F, 0x40, 0x40, 0x40, 0x3F},
+/** @brief Pixels belonging to the readings screen, independent of the driver. */
+static const uint8_t thermometer_pixels[] = {
+    0x1C,
+    0x00,
+    0x22,
+    0x00,
+    0x22,
+    0x00,
+    0x22,
+    0x00,
+    0x22,
+    0x00,
+    0x2A,
+    0x00,
+    0x2A,
+    0x00,
+    0x2A,
+    0x00,
+    0x2A,
+    0x00,
+    0x2A,
+    0x00,
+    0x3E,
+    0x00,
+    0x6B,
+    0x00,
+    0x5D,
+    0x00,
+    0xBE,
+    0x80,
+    0xBE,
+    0x80,
+    0xBE,
+    0x80,
+    0x5D,
+    0x00,
+    0x63,
+    0x00,
+    0x1C,
+    0x00,
 };
+
+/** @brief Humidity icon, stored as MSB-first rows with a two-byte stride. */
+static const uint8_t drop_pixels[] = {
+    0x08,
+    0x00,
+    0x14,
+    0x00,
+    0x14,
+    0x00,
+    0x22,
+    0x00,
+    0x22,
+    0x00,
+    0x41,
+    0x00,
+    0x41,
+    0x00,
+    0x80,
+    0x80,
+    0xA0,
+    0x80,
+    0xA0,
+    0x80,
+    0xA0,
+    0x80,
+    0x41,
+    0x00,
+    0x3E,
+    0x00,
+};
+
+/** @brief Component storage supplied by the composition, outside the HAL arena. */
+static ssd1306_t display;
+
+/** @brief Last successful values, or placeholders before the first acquisition. */
+static char temperature_text[16] = "--,-";
+static char humidity_text[16] = "--,-";
 
 /** @brief Persistent storage shared by all HAL resource constructors. */
 _Alignas(max_align_t) static unsigned char hal_storage[1024];
@@ -123,94 +172,64 @@ static bool sht31_measure(int32_t *temperature_tenths, uint32_t *humidity_tenths
     return true;
 }
 
-static hal_status_t oled_write_page(uint8_t page, const uint8_t data[OLED_WIDTH + 1]) {
-    const uint8_t address[] = {0x00, (uint8_t)(0xB0 | page), 0x00, 0x10};
-    hal_status_t status = hal_i2c_write(board.devices_i2c, board.ssd1306_address, address, sizeof(address));
-    if (status != HAL_STATUS_OK) {
-        return status;
-    }
-    return hal_i2c_write(board.devices_i2c, board.ssd1306_address, data, OLED_WIDTH + 1);
+static bool report_display_status(const char *step, ssd1306_status_t status) {
+    telemetry_printf("%s: %s (ssd1306 status %d)\n", step, status == SSD1306_STATUS_OK ? "OK" : "FALHOU", status);
+    return status == SSD1306_STATUS_OK;
 }
 
-static hal_status_t oled_init(void) {
-    // SSD1306, 128x64, internal charge pump, page addressing mode.
-    const uint8_t init[] = {
-        0x00,
-        0xAE,
-        0xD5,
-        0x80,
-        0xA8,
-        0x3F,
-        0xD3,
-        0x00,
-        0x40,
-        0x8D,
-        0x14,
-        0x20,
-        0x02,
-        0xA1,
-        0xC8,
-        0xDA,
-        0x12,
-        0x81,
-        0xCF,
-        0xD9,
-        0xF1,
-        0xDB,
-        0x40,
-        0x2E,
-        0xA4,
-        0xA6,
+static ssd1306_status_t draw_readings_layout(void) {
+    const ssd1306_bitmap_t thermometer = {
+        .data = thermometer_pixels,
+        .size = (uint32_t)sizeof(thermometer_pixels),
+        .width = 9,
+        .height = 19,
     };
-    hal_status_t status = hal_i2c_write(board.devices_i2c, board.ssd1306_address, init, sizeof(init));
-    if (status != HAL_STATUS_OK) {
+    const ssd1306_bitmap_t drop = {
+        .data = drop_pixels,
+        .size = (uint32_t)sizeof(drop_pixels),
+        .width = 9,
+        .height = 13,
+    };
+    ssd1306_status_t status;
+    if ((status = ssd1306_draw_text(&display, 6, 3, "TEMPERATURA", SSD1306_FONT_SMALL)) != SSD1306_STATUS_OK ||
+        (status = ssd1306_draw_bitmap(&display, 6, 22, &thermometer)) != SSD1306_STATUS_OK ||
+        (status = ssd1306_draw_line(&display, 6, 46, 121, 46, true)) != SSD1306_STATUS_OK ||
+        (status = ssd1306_draw_text(&display, 108, 24, "°C", SSD1306_FONT_MEDIUM)) != SSD1306_STATUS_OK ||
+        (status = ssd1306_draw_bitmap(&display, 6, 50, &drop)) != SSD1306_STATUS_OK ||
+        (status = ssd1306_draw_text(&display, 21, 53, "UMIDADE", SSD1306_FONT_SMALL)) != SSD1306_STATUS_OK ||
+        (status = ssd1306_draw_text(&display, 116, 48, "%", SSD1306_FONT_MEDIUM)) != SSD1306_STATUS_OK) {
         return status;
     }
-
-    const uint8_t blank[OLED_WIDTH + 1] = {0x40};
-    for (uint8_t page = 0; page < OLED_PAGES; ++page) {
-        status = oled_write_page(page, blank);
-        if (status != HAL_STATUS_OK) {
-            return status;
-        }
-    }
-    const uint8_t display_on[] = {0x00, 0xAF};
-    return hal_i2c_write(board.devices_i2c, board.ssd1306_address, display_on, sizeof(display_on));
+    return SSD1306_STATUS_OK;
 }
 
-static hal_status_t oled_write_line(uint8_t first_page, const char *text) {
-    uint8_t top[OLED_WIDTH + 1] = {0x40};
-    uint8_t bottom[OLED_WIDTH + 1] = {0x40};
-    for (uint8_t character = 0;
-         character < OLED_LINE_CHARS && text[character] != '\0';
-         ++character) {
-        const uint8_t *glyph = font[(uint8_t)text[character]];
-        for (uint8_t column = 0; column < 5; ++column) {
-            uint16_t pixels = 0;
-            for (uint8_t row = 0; row < 7; ++row) {
-                if ((glyph[column] & (1U << row)) != 0) {
-                    pixels |= (uint16_t)(3U << (row * 2));
-                }
-            }
-            uint8_t x = character * 12 + column * 2 + 1;
-            top[x] = top[x + 1] = (uint8_t)pixels;
-            bottom[x] = bottom[x + 1] = (uint8_t)(pixels >> 8);
-        }
-    }
-
-    hal_status_t status = oled_write_page(first_page, top);
-    if (status != HAL_STATUS_OK) {
+static ssd1306_status_t draw_right_aligned(const char *text, ssd1306_font_t font, uint32_t left, uint32_t right, uint32_t y) {
+    uint32_t width;
+    uint32_t height;
+    ssd1306_status_t status = ssd1306_measure_text(text, font, &width, &height);
+    if (status != SSD1306_STATUS_OK) {
         return status;
     }
-    return oled_write_page(first_page + 1, bottom);
+    if (width > right - left) {
+        return SSD1306_STATUS_INVALID_ARGUMENT;
+    }
+    return ssd1306_draw_text(&display, right - width, y, text, font);
 }
 
-static hal_status_t oled_show(const char *top, const char *bottom) {
-    hal_status_t status = oled_write_line(1, top);
-    if (status != HAL_STATUS_OK) {
+static ssd1306_status_t draw_readings(bool sample_error) {
+    // Redraw only the changing fields, keeping labels and icons in the framebuffer.
+    ssd1306_status_t status;
+    if ((status = ssd1306_fill_rect(&display, 20, 14, 82, 28, false)) != SSD1306_STATUS_OK ||
+        (status = ssd1306_fill_rect(&display, 68, 48, 44, 16, false)) != SSD1306_STATUS_OK ||
+        (status = ssd1306_fill_rect(&display, 88, 3, 5, 7, false)) != SSD1306_STATUS_OK ||
+        (status = draw_right_aligned(temperature_text, SSD1306_FONT_LARGE, 20, 98, 14)) != SSD1306_STATUS_OK ||
+        (status = draw_right_aligned(humidity_text, SSD1306_FONT_MEDIUM, 68, 110, 48)) != SSD1306_STATUS_OK) {
         return status;
     }
-    return oled_write_line(5, bottom);
+    if (sample_error) {
+        return ssd1306_draw_text(&display, 88, 3, "!", SSD1306_FONT_SMALL);
+    }
+    return SSD1306_STATUS_OK;
 }
 
 static void update_measurement(bool display_ready) {
@@ -218,9 +237,9 @@ static void update_measurement(bool display_ready) {
     uint32_t humidity;
     if (!sht31_measure(&temperature, &humidity)) {
         if (display_ready) {
-            hal_status_t status = oled_show("SHT31 ERRO", "");
-            if (status != HAL_STATUS_OK) {
-                report_status("SSD1306: atualizacao", status);
+            ssd1306_status_t status = draw_readings(true);
+            if (status != SSD1306_STATUS_OK) {
+                report_display_status("SSD1306: desenho", status);
             }
         }
         return;
@@ -234,13 +253,11 @@ static void update_measurement(bool display_ready) {
                      (unsigned long)(humidity / 10),
                      (unsigned long)(humidity % 10));
     if (display_ready) {
-        char temperature_line[32];
-        char humidity_line[32];
-        snprintf(temperature_line, sizeof(temperature_line), "T:%s%ld.%ld C", temperature < 0 ? "-" : "", (long)(magnitude / 10), (long)(magnitude % 10));
-        snprintf(humidity_line, sizeof(humidity_line), "UR:%lu.%lu%%", (unsigned long)(humidity / 10), (unsigned long)(humidity % 10));
-        hal_status_t status = oled_show(temperature_line, humidity_line);
-        if (status != HAL_STATUS_OK) {
-            report_status("SSD1306: atualizacao", status);
+        snprintf(temperature_text, sizeof(temperature_text), "%s%ld,%ld", temperature < 0 ? "-" : "", (long)(magnitude / 10), (long)(magnitude % 10));
+        snprintf(humidity_text, sizeof(humidity_text), "%lu,%lu", (unsigned long)(humidity / 10), (unsigned long)(humidity % 10));
+        ssd1306_status_t status = draw_readings(false);
+        if (status != SSD1306_STATUS_OK) {
+            report_display_status("SSD1306: desenho", status);
         }
     }
 }
@@ -277,7 +294,17 @@ void app_main(void) {
                               hal_gpio_write(board.led, !board.led_active_level)) &&
                 led_ready;
 
-    bool display_ready = report_status("SSD1306: inicializacao", oled_init());
+    const ssd1306_config_t display_config = {
+        .i2c = board.devices_i2c,
+        .address = board.ssd1306_address,
+    };
+    bool display_ready = report_display_status("SSD1306: inicializacao", ssd1306_init(&display, &display_config));
+    if (display_ready) {
+        display_ready = report_display_status("SSD1306: layout", draw_readings_layout()) &&
+                        report_display_status("SSD1306: valores iniciais", draw_readings(false));
+    }
+    bool display_waiting_retry = false;
+    TickType_t last_display_failure = 0;
 
     telemetry_printf("Pressione o botao: o LED deve acender; solte para apagar.\n");
     bool last_pressed = false;
@@ -289,6 +316,18 @@ void app_main(void) {
             pdMS_TO_TICKS(MEASURE_PERIOD_MS)) {
             last_measurement = now;
             update_measurement(display_ready);
+        }
+
+        if (display_ready && (!display_waiting_retry ||
+                              (TickType_t)(now - last_display_failure) >= pdMS_TO_TICKS(MEASURE_PERIOD_MS))) {
+            // Limit each iteration to one synchronous page; retry failures after 2 s.
+            bool pending;
+            ssd1306_status_t status = ssd1306_update(&display, &pending);
+            display_waiting_retry = status != SSD1306_STATUS_OK;
+            if (display_waiting_retry) {
+                last_display_failure = xTaskGetTickCount();
+                report_display_status("SSD1306: atualizacao", status);
+            }
         }
 
         if (button_ready) {
@@ -313,6 +352,6 @@ void app_main(void) {
                 }
             }
         }
-        vTaskDelay(pdMS_TO_TICKS(50));
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
 }

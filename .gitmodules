@@ -10,3 +10,6 @@
 [submodule "components/ssd1306"]
 	path = components/ssd1306
 	url = git@github.com:fmsantos8/ssd1306.git
+[submodule "components/sht31d"]
+	path = components/sht31d
+	url = git@github.com:fmsantos8/sht31d.git

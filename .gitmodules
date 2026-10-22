@@ -13,3 +13,12 @@
 [submodule "components/sht31d"]
 	path = components/sht31d
 	url = git@github.com:fmsantos8/sht31d.git
+[submodule "components/button"]
+	path = components/button
+	url = git@github.com:fmsantos8/button.git
+[submodule "components/led"]
+	path = components/led
+	url = git@github.com:fmsantos8/led.git
+[submodule "components/telemetry"]
+	path = components/telemetry
+	url = git@github.com:fmsantos8/telemetry.git

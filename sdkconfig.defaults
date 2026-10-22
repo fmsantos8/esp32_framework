@@ -1,0 +1,2 @@
+# UART0 belongs exclusively to the HAL telemetry component.
+CONFIG_ESP_CONSOLE_NONE=y

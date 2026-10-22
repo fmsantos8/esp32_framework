@@ -12,10 +12,19 @@ if(DEFINED COMPONENT_NAME AND "${COMPONENT_DIR}" STREQUAL "${CMAKE_CURRENT_LIST_
     idf_component_register(
         SRCS
             "main/main.c"
+            "apps/app.c"
+            "apps/acquisition/app_acquisition.c"
+            "apps/button/app_button.c"
+            "apps/interface/app_interface.c"
+            "apps/indication/app_indication.c"
+            "apps/telemetry/app_telemetry.c"
             "bsp/esp32_devkit_v1/bsp.c"
             "components/button/cmp_button.c"
             "components/led/cmp_led.c"
             "components/telemetry/cmp_telemetry.c"
+            "components/sht31d/cmp_sht31d.c"
+            "components/ssd1306/cmp_ssd1306.c"
+            "components/ssd1306/cmp_ssd1306_fonts.c"
             "hal/ports/esp32-wroom-32/hal_esp32.c"
             "hal/ports/esp32-wroom-32/system/hal_system.c"
             "hal/ports/esp32-wroom-32/gpio/hal_gpio.c"
@@ -23,7 +32,11 @@ if(DEFINED COMPONENT_NAME AND "${COMPONENT_DIR}" STREQUAL "${CMAKE_CURRENT_LIST_
             "hal/ports/esp32-wroom-32/uart/hal_uart.c"
             "hal/ports/esp32-wroom-32/timer/hal_timer.c"
             "${HAL_ESP32_MEMORY_DIR}/hal_memory.c"
-        INCLUDE_DIRS "bsp" "components/button" "components/led" "components/telemetry" "${HAL_ESP32_INTERFACE_DIR}"
+        INCLUDE_DIRS
+            "apps" "bsp"
+            "components/button" "components/led" "components/telemetry"
+            "components/sht31d" "components/ssd1306"
+            "${HAL_ESP32_INTERFACE_DIR}"
         PRIV_INCLUDE_DIRS "hal/ports/esp32-wroom-32" "${HAL_ESP32_MEMORY_DIR}"
         PRIV_REQUIRES
             esp_driver_gpio esp_driver_i2c esp_driver_uart esp_driver_gptimer

@@ -59,8 +59,8 @@ static hal_status_t init_timer(hal_timer_t **timer, hal_timer_callback_t callbac
     return hal_timer_config(timer, &config);
 }
 
-hal_status_t bsp_init(hal_timer_callback_t timer_callback, bsp_resources_t *out_resources) {
-    if (timer_callback == NULL || out_resources == NULL) {
+hal_status_t bsp_init(hal_timer_callback_t timer_callback, bsp_resources_t *resources) {
+    if (timer_callback == NULL || resources == NULL) {
         return HAL_STATUS_INVALID_ARGUMENT;
     }
     if (init_attempted) {
@@ -68,29 +68,29 @@ hal_status_t bsp_init(hal_timer_callback_t timer_callback, bsp_resources_t *out_
     }
     init_attempted = true;
 
-    bsp_resources_t resources = {
+    bsp_resources_t configured_resources = {
         .button_active_level = false,
         .led_active_level = true,
         .sht31_address = 0x44,
         .ssd1306_address = 0x3C,
     };
 
-    hal_status_t status = init_led(&resources.led, resources.led_active_level);
+    hal_status_t status = init_led(&configured_resources.led, configured_resources.led_active_level);
     if (status == HAL_STATUS_OK) {
-        status = init_button(&resources.button);
+        status = init_button(&configured_resources.button);
     }
     if (status == HAL_STATUS_OK) {
-        status = init_i2c(&resources.devices_i2c);
+        status = init_i2c(&configured_resources.devices_i2c);
     }
     if (status == HAL_STATUS_OK) {
-        status = init_uart(&resources.telemetry_uart);
+        status = init_uart(&configured_resources.telemetry_uart);
     }
     if (status == HAL_STATUS_OK) {
-        status = init_timer(&resources.timebase_timer, timer_callback);
+        status = init_timer(&configured_resources.timebase_timer, timer_callback);
     }
     if (status == HAL_STATUS_OK) {
         // Publish the handles only after every resource has been constructed.
-        *out_resources = resources;
+        *resources = configured_resources;
     }
     return status;
 }

@@ -47,14 +47,14 @@ typedef struct {
  * initialize callback data before starting it. Invalid arguments allow retry.
  * Once construction starts, further attempts are rejected even after failure;
  * restart firmware to retry. Failure may consume arena space and reserve hardware.
- * out_resources needs no prior initialization and changes only on success.
+ * resources needs no prior initialization and changes only on success.
  *
  * @param[in] timer_callback Required callback invoked in interrupt context for
  * each serviced timer expiration, with a nominal period of one millisecond.
- * @param[out] out_resources Receives all constructed resources on success.
+ * @param[out] resources Receives all constructed resources on success.
  *
  * @retval HAL_STATUS_OK All resources were constructed.
- * @retval HAL_STATUS_INVALID_ARGUMENT timer_callback or out_resources is NULL.
+ * @retval HAL_STATUS_INVALID_ARGUMENT timer_callback or resources is NULL.
  * @retval HAL_STATUS_INVALID_STATE Construction has already been attempted, or
  * HAL resource construction is closed.
  * @retval HAL_STATUS_NOT_INITIALIZED The system has not been initialized.
@@ -63,7 +63,7 @@ typedef struct {
  * @retval HAL_STATUS_NO_MEMORY HAL or SDK object storage is unavailable.
  * @retval HAL_STATUS_ERROR A peripheral could not be configured.
  */
-hal_status_t bsp_init(hal_timer_callback_t timer_callback, bsp_resources_t *out_resources);
+hal_status_t bsp_init(hal_timer_callback_t timer_callback, bsp_resources_t *resources);
 
 #ifdef __cplusplus
 }

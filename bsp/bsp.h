@@ -1,5 +1,6 @@
 /**
  * @file bsp.h
+ * @author Fabricio Santos (fmsantos8@ucs.br)
  * @brief Hardware resources provided by the selected board.
  */
 #ifndef BSP_H

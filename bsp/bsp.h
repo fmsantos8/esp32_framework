@@ -22,9 +22,8 @@ extern "C" {
 /**
  * @brief Constructed HAL resources and electrical characteristics of the board.
  *
- * @details Handles refer to persistent objects stored in the HAL arena. The
- * composition supplies these resources to components without transferring
- * ownership. The sensor and display share devices_i2c and use distinct addresses.
+ * @details Persistent handles belong to the HAL arena; composition lends them
+ * to components. Sensor and display share devices_i2c with distinct addresses.
  */
 typedef struct {
     hal_gpio_t *button;          /** Button input GPIO. */
@@ -43,16 +42,12 @@ typedef struct {
 /**
  * @brief Construct the selected board's hardware resources once.
  *
- * @details Call sequentially from normal execution context after
- * hal_system_init() and before hal_system_seal(). The LED is configured off
- * first, and the timer remains stopped. The composition must initialize all
- * state shared with timer_callback before starting the timer.
- *
- * Invalid arguments are rejected without beginning construction. Once
- * construction begins, further attempts are rejected, including after failure.
- * A failed construction may consume arena space and reserve hardware resources;
- * restart the firmware before retrying. out_resources is modified only on success
- * and does not need to be initialized before this call.
+ * @details Call sequentially in normal context between hal_system_init() and
+ * hal_system_seal(). Configures the LED off first and leaves the timer stopped;
+ * initialize callback data before starting it. Invalid arguments allow retry.
+ * Once construction starts, further attempts are rejected even after failure;
+ * restart firmware to retry. Failure may consume arena space and reserve hardware.
+ * out_resources needs no prior initialization and changes only on success.
  *
  * @param[in] timer_callback Required callback invoked in interrupt context for
  * each serviced timer expiration, with a nominal period of one millisecond.

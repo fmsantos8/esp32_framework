@@ -1,7 +1,7 @@
 /**
  * @file app_button.h
  * @author Fabricio Santos (fmsantos8@ucs.br)
- * @brief Reads the button state and notifies a valid press
+ * @brief Detects valid button presses.
  */
 #ifndef APP_BUTTON_H
 #define APP_BUTTON_H
@@ -12,29 +12,15 @@ extern "C" {
 
 #include "cmp_button.h"
 
-#include <stdbool.h>
-#include <stdint.h>
-
 /**
- * @brief Callback function type for button press events.
- *
+ * @brief Reset button press detection to the released state.
  */
-typedef void (*app_button_press_callback_t)(void *context);
+void app_button_init(void);
 
 /**
- * @brief Initialize the task with press callback.
+ * @brief Read the button state and detect a valid press.
  *
- * @param[in] press_callback Required function to call on a valid press
- * @param[in] callback_context Context passed to the callback
- *
- * @return true if the task was initialized successfully, false otherwise
- */
-bool app_button_init(app_button_press_callback_t press_callback, void *callback_context);
-
-/**
- * @brief Read the button state and notify a valid press
- *
- * @param[in] button Button component
+ * @param[in,out] button Initialized button component; use the same instance between calls.
  */
 void app_button_run(button_t *button);
 

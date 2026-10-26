@@ -1,0 +1,40 @@
+wing: esp32_framework
+rooms:
+- name: hal
+  description: Files from hal/
+  keywords:
+  - hal
+  - hal
+- name: main
+  description: Files from main/
+  keywords:
+  - main
+  - main
+- name: scripts
+  description: Files from scripts/
+  keywords:
+  - scripts
+  - scripts
+- name: bsp
+  description: Files from bsp/
+  keywords:
+  - bsp
+  - bsp
+- name: apps
+  description: Files from apps/
+  keywords:
+  - apps
+  - apps
+- name: documentation
+  description: Files from docs/
+  keywords:
+  - documentation
+  - docs
+- name: frontend
+  description: Files from components/
+  keywords:
+  - frontend
+  - components
+- name: general
+  description: Files that don't fit other rooms
+  keywords: []

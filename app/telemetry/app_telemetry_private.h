@@ -13,7 +13,7 @@ extern "C" {
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "telemetry/cmp_telemetry_types.h"
+#include "app_telemetry.h"
 
 #define QUEUE_CAPACITY 8U    /** Maximum number of queued records. */
 #define RETRY_INTERVAL 1000U /** Delay after a failed send, in milliseconds. */

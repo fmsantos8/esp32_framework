@@ -1,0 +1,2 @@
+# Reserve UART0 for framework telemetry.
+CONFIG_ESP_CONSOLE_NONE=y

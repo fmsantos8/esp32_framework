@@ -1,64 +1,129 @@
 ---
 name: framework-architecture
-description: Explicar e aplicar as responsabilidades dos módulos do framework embarcado deste repositório ao projetar, implementar ou revisar app, componentes, HAL, arena de memória, portes, BSP e integração. Não usar para tarefas alheias à arquitetura do firmware.
+description: Aplicar a arquitetura e os padrões de código e documentação deste framework embarcado ao projetar, implementar ou revisar aplicações, componentes, HAL, memória, portes, BSP e integração. Não usar para tarefas alheias ao firmware deste projeto.
 ---
 
-# Arquitetura do framework
+# Arquitetura e padrões do framework
 
-Use este contexto ao decidir **onde colocar código**, quais dependências um módulo pode ter e se uma mudança é portável. A fonte da arquitetura pretendida é `68d497929590b37ccdc69df0/2-textuais/3-proposta.tex`, principalmente “Arquitetura geral e regra de dependências”, “Interfaces e contratos portáveis”, “Organização dos artefatos” e “Prova de conceito proposta”. Consulte os arquivos reais e a documentação Doxygen dos cabeçalhos para a API vigente. Se a proposta e o código divergirem, explicite a diferença; não apresente uma intenção do TCC como funcionalidade já implementada.
+Use estas decisões ao desenvolver o firmware. Confira os arquivos reais e o Doxygen dos cabeçalhos antes de alterar contratos: o retrato da implementação abaixo pode evoluir. Quando disponíveis, consulte `TCC.pdf` ou as fontes da proposta para a arquitetura pretendida; diferencie intenção do TCC de funcionalidade implementada. Se o documento estiver ausente, baseie o trabalho na árvore e explicite a limitação quando ela afetar a análise.
 
-O documento do TCC pode estar ausente neste checkout. Nesse caso, registre a limitação e use os contratos e artefatos disponíveis para descrever o estado implementado.
+## Nomes, tipos e organização
 
-## Partes e responsabilidades
+- Use `cmp_<componente>_*` nas funções dos componentes, inclusive auxiliares privadas, e `cmp_<componente>` nos nomes dos arquivos. Exemplos: `cmp_button_read`, `cmp_ssd1306_init`, `cmp_sht31d_start_measurement`. Preserve a grafia `sht31d` nesse componente; revise símbolos, includes e documentação ao renomear.
+- Parâmetros de saída não recebem o prefixo `out_`: use `pressed`, `sample`, `resources`, `ticks`, etc. Atualize declaração, definição, documentação e chamadas em conjunto.
+- Separe tipos públicos em `*_types.h`, operações em `*.h` e configuração/armazenamento de composição em `*_config.h`, conforme o módulo. Preserve os nomes de tipos já adotados, como `button_t` e `ssd1306_status_t`; o prefixo de função `cmp_` não exige renomeá-los.
+- Em `hal/memory`, use `uint32_t` para capacidades, tamanhos, consumo e cálculos internos, em vez de `size_t`. Preserve esse padrão nas APIs do framework que já o adotam e verifique conversões/overflow ao interagir com bibliotecas/SDKs.
+- Use `#define` para constantes como dimensões e tamanho do framebuffer do SSD1306. Isso não elimina enums de estados, fontes ou resultados.
+- O nome adotado é `hal_esp32_convert_timeout_to_ticks(uint32_t timeout, TickType_t *ticks)`. Preserve `timeout`, sem `_ms`, nessa função; documente unidade, arredondamento e limites reais da conversão.
+- Respeite o formatador do projeto. Para sequências de bytes do SSD1306, use matrizes de bytes com linhas curtas e coerentes; não recorra a strings `"\x.."`, linhas extensas ou `clang-format off/on` para contornar a formatação.
+- Não crie nem escreva READMEs sem pedido explícito. Não recrie `hal/memory/tests/`, removido pelo usuário; essa decisão não é uma proibição geral de validar mudanças em outros módulos.
+
+## Comentários e Doxygen
+
+- Escreva o Doxygen em inglês, com frases curtas e diretas. Use `@brief` para dizer o que a função, tipo ou arquivo faz.
+- Nas funções públicas, documente os parâmetros com sua direção e uma descrição objetiva do papel de cada argumento. Indique requisitos como argumento obrigatório quando isso orientar o uso da API.
+- Use sempre `@retval` para documentar os retornos, inclusive booleanos e valores simples, com uma descrição curta de cada resultado possível. Funções `void` não precisam de tag de retorno.
+- Nos typedefs de callback, use apenas `@brief` para descrever a finalidade do tipo; não exija `@param` para seus argumentos.
+- Use `@details` somente quando uma informação adicional for essencial ao uso correto da API. Evite narrar a implementação, listar inicializações de campos ou repetir detalhes internos de outra camada.
+- Dentro de funções em arquivos `.c`, use sempre `//` para comentários de implementação. A regra não substitui Doxygen de declarações de funções, tipos, enums ou variáveis, inclusive em `.c`.
+- Documente campos e valores de enums no padrão `campo; /** Descrição. */`, começando com `/**`, sem `/**<`, como em `hal_memory_info_t`.
+- Separe mudanças de grupo de tags por uma linha vazia Doxygen (` *`): `@brief` → `@details`, `@brief`/`@details` → `@param`, `@param` → `@retval`. Parâmetros consecutivos e retornos consecutivos ficam no mesmo grupo.
+- **Única exceção de espaçamento: o bloco de topo que documenta o arquivo.** Mantenha esse cabeçalho em arquivos `.c` e `.h`, com `@file`, `@author` e `@brief` consecutivos e sem `@details`. Complete blocos `@file` sem autor com `Fabricio Santos (fmsantos8@ucs.br)`.
+
+Exemplo de cabeçalho de arquivo:
+
+```c
+/**
+ * @file cmp_button.h
+ * @author Fabricio Santos (fmsantos8@ucs.br)
+ * @brief Logical button input.
+ */
+```
+
+Exemplo de função com documentação direta:
+
+```c
+/**
+ * @brief Initialize the task with a press callback.
+ *
+ * @param[in] press_callback Required function to call on a valid press.
+ * @param[in] callback_context Context passed to the callback.
+ *
+ * @retval true Task initialized successfully.
+ * @retval false press_callback is NULL.
+ */
+bool app_button_init(app_button_press_callback_t press_callback, void *callback_context);
+```
+
+Exemplo de tipo de callback:
+
+```c
+/**
+ * @brief Callback function type for button press events.
+ */
+typedef void (*app_button_press_callback_t)(void *context);
+```
+
+## Responsabilidades e dependências
 
 | Parte | Responsabilidade | Dependências permitidas |
 | --- | --- | --- |
-| `app/` (planejado) | Coordenar o comportamento da prova de conceito: aquisição periódica, estado da última amostra, seleção das duas telas, política de repetição após falhas e estados de indicação. As “tarefas” são módulos de contexto e processamento, sem pressupor um RTOS. | Interfaces públicas da aplicação e dos componentes. |
-| `components/` (planejado) | Encapsular mecanismos reutilizáveis dos dispositivos e serviços; cada componente tem interface pública, contexto, inicialização e dependências explícitas. Recebe recursos válidos da integração, sem escolher a instância física. | Interfaces de outros componentes e contratos públicos da HAL. |
-| `hal/interface/` | Definir em C os contratos portáveis de GPIO, I2C, UART, temporizador e códigos de estado. Expõe tipos de recurso opacos e semântica observável; não conhece estruturas do SDK. | Tipos C e outros contratos públicos da HAL. |
-| `hal/memory/` | Fornecer uma arena linear C11 compartilhada pelos portes para armazenar objetos persistentes da HAL. Administra alinhamento, capacidade, consumo e selagem sobre um buffer externo. | Biblioteca padrão C11; não depende de `hal/interface`, SDK, BSP ou RTOS. |
-| `hal/ports/<plataforma>/` | Implementar as funções públicas da HAL usando o SDK selecionado; manter tipos concretos, estado do driver e tradução de erros. O mesmo porte STM32F4 deve atender às duas placas STM32 previstas. | HAL pública, `hal/memory` e SDK da plataforma; não incorpora pinos nem política de produto próprios de uma placa. |
-| `bsp/` ou `boards/` | Descrever uma placa concreta: pinos, controladores, barramentos, polaridades, endereços e demais recursos físicos; realizar ou apoiar a inicialização de baixo nível. | HAL e SDK quando necessários; não conhece módulos de `app/` ou `components/`. |
-| `main/` e arquivos de integração/compilação | Servir de raiz de composição: escolher porte e BSP, fornecer e dimensionar o buffer da arena, criar contextos, injetar dependências, inicializar os recursos e selar a arena antes do processamento da aplicação. Define como executar os módulos com o ambiente da plataforma. | Pode conhecer interfaces públicas, memória, porte, BSP e SDK; não deve concentrar a política de produto da aplicação final. |
-| SDK e hardware | Fornecer drivers, serviços de plataforma e dispositivos físicos. | Acesso concentrado no porte, no BSP e na integração. |
-| `docs/` e testes | Documentar contratos, capacidades e versões; verificar comportamento equivalente dos portes e o isolamento das dependências. | Consultar os contratos e artefatos correspondentes. |
+| `apps/` | Política de aquisição, telas, seleção por botão, última amostra válida, repetição após falhas, indicação e eventos de telemetria. | Interfaces públicas das aplicações e dos componentes; sem HAL, BSP, porte ou SDK. |
+| `components/` | Mecanismos reutilizáveis de dispositivos/serviços, com contexto, configuração e dependências explícitas. | Interfaces de componentes e HAL pública; sem BSP, porte ou SDK. |
+| `hal/interface/` | Contratos portáveis e handles opacos de GPIO, I2C, UART, timer e sistema. | Tipos C e contratos públicos da HAL; sem tipos do fabricante. |
+| `hal/memory/` | Arena linear C11 compartilhada pelos portes, independente da HAL. | Biblioteca padrão C11; sem SDK, RTOS ou `hal/interface`. |
+| `hal/ports/<plataforma>/` | Implementação dos contratos, estruturas concretas, integração com drivers e tradução de erros. | HAL pública, `hal/memory` e SDK; sem escolhas de placa ou política de aplicação. |
+| `bsp/` | Pinos, instâncias, polaridades, endereços e construção dos recursos de uma placa concreta. | HAL e SDK quando necessário; sem componentes ou aplicações. |
+| `main/` e integração | Escolher BSP/porte, criar armazenamento e contextos, conectar dependências e definir a execução na plataforma. | Pode conhecer todas as camadas; a política do produto permanece em `apps/`. |
 
-Os projetos convencionais de comparação, sem framework, ficam fora desta arquitetura; neles o uso direto do SDK é intencional.
+- O BSP escolhe **qual recurso físico** atende cada função; o porte implementa **como operá-lo**. A composição converte `bsp_resources_t` nas configurações dos componentes e injeta seus handles nas aplicações.
+- A aplicação não deve incluir BSP ou headers de configuração de componentes que exponham HAL. Configurações necessárias à recuperação podem chegar como ponteiros opacos, construídos e mantidos válidos pela composição.
+- Retornos de componentes são próprios do componente, como `button_status_t` e `ssd1306_status_t`; não exponha `hal_status_t` ou códigos do SDK à aplicação. Traduza erros na fronteira correspondente.
+- Contextos de componentes e aplicações pertencem à composição e têm vida útil explícita; não use a arena da HAL para eles. Funções de inicialização devem preencher o próprio contexto sem exigir que o chamador o zere antes; respeite os contratos de falha e reinicialização de cada módulo.
+- As tarefas portáveis são módulos de contexto e processamento cooperativo, sem pressupor RTOS. Não espalhe chamadas FreeRTOS em `apps/` ou `components/`.
+- Serialize o acesso ao I2C compartilhado entre SHT31-D e SSD1306 em contexto normal. Não suponha segurança concorrente nem uso de HAL em ISR sem autorização do contrato. Projetos convencionais de comparação, sem framework, podem usar o SDK diretamente.
 
-## Componentes reutilizáveis previstos
+## Inicialização da HAL e arena persistente
 
-- **Botão:** interpreta o GPIO de entrada e a polaridade fornecida pela placa, oferecendo o estado de acionamento sem expor o pino. Na proposta atual, a aplicação usa a contagem de tempo para fazer o debounce por software de aproximadamente 30 ms.
-- **LED:** traduz comandos lógicos de indicação para o GPIO de saída, respeitando a polaridade configurada pela placa. A aplicação decide quando manter aceso, piscar após falha ou apagar.
-- **SHT31-D:** emite comandos I2C, obtém temperatura e umidade, valida a resposta e devolve dados ou erro. Recebe o barramento I2C e o endereço; não decide repetição de leitura nem preservação da última amostra.
-- **SSD1306:** encapsula a inicialização e os comandos/dados do controlador OLED via I2C. Recebe o mesmo barramento do sensor e seu próprio endereço; a aplicação decide qual tela e conteúdo apresentar.
-- **Telemetria:** produz o formato comum das leituras e dos erros e os envia pela UART recebida. A aplicação decide quais eventos comunicar. A configuração é estabelecida na construção do recurso; o contrato atual não oferece reconfiguração da UART em execução.
-- **Temporização:** apoia prazos e intervalos sem bloqueio; a política de quando medir, atualizar tela ou piscar pertence à aplicação. O contrato atual fornece notificações periódicas de um temporizador físico, por callback em interrupção, e não uma função de consulta de milissegundos. Uma contagem mantida a partir dessas notificações exige sincronização e está sujeita às condições de latência e aglutinação documentadas pelo porte.
+Ordem de composição: `hal_system_init()` → construção dos recursos pelo BSP → `hal_system_seal()` → componentes/aplicação e processamento. Prepare os dados do callback antes de iniciar o timer; inicializações de sensor/display podem ser coordenadas pela aplicação para permitir recuperação.
 
-O TCC cita os componentes como artefatos previstos. Os detalhes de suas APIs ainda precisam ser definidos a partir dos contratos atuais e dos requisitos da prova de conceito; não inferir nomes de funções a partir desta lista.
+- `hal_system_init` padroniza infraestrutura e clocks do sistema, respeitando o startup já realizado pelo SDK, e inicializa a arena com armazenamento fornecido pela integração.
+- Cada `hal_*_config` é um construtor completo do periférico, executado com a arena inicializada e aberta: valida capacidades, configura clocks periféricos, pinos, funções alternativas/roteamento e drivers necessários e entrega um handle válido. Não dependa de inicializações periféricas externas ocultas. A inicialização prévia documentada do sistema continua necessária.
+- Os objetos concretos, como `hal_gpio_t`, ficam privados no porte e são alocados durante esses construtores. Não presuma reconfiguração em execução, destruição ou desalocação. Após uma reserva, uma falha do SDK pode consumir espaço e exigir reinício, conforme o contrato.
 
-## Regras de fronteira
+Decisões do módulo `hal/memory/`:
 
-1. `app/` e `components/` não incluem headers do BSP, dos portes ou do SDK. Seus dados de placa chegam por parâmetros e handles; recursos compartilhados, como o barramento I2C do SHT31-D e do SSD1306, são injetados pela integração.
-2. Cabeçalhos de `hal/interface/` não expõem tipos do fabricante. O porte implementa os símbolos `hal_*`, mantém as estruturas concretas e aloca os objetos nos construtores. BSP/integração fornecem configurações e recebem ponteiros opacos; não devem precisar declarar objetos concretos da HAL por valor.
-3. O BSP escolhe **qual** recurso físico representa uma função da placa; o porte define **como** executar uma operação comum nesse recurso. Decisões sobre clocks, pinos e compilação permanecem na região específica da placa/plataforma.
-4. A composição pode conhecer todas as partes para conectá-las, mas as decisões de produto ficam na aplicação. A execução das tarefas pode ser um laço principal ou um mecanismo da plataforma; não há abstração comum de RTOS.
-5. As funções `hal_gpio_config`, `hal_i2c_config`, `hal_uart_config` e `hal_timer_config` são construtores de inicialização: recebem a configuração e um ponteiro de saída para o handle, exigindo arena inicializada e não selada. Não presumir reconfiguração em execução, destruição ou liberação dos objetos. O porte valida os campos e capacidades antes de alocar, e entrega um handle válido após o sucesso da construção.
-6. Use o Doxygen do cabeçalho público para assinaturas e semântica vigentes. I2C e UART recebem um timeout positivo em milissegundos na configuração, mantido durante a vida do objeto; as transferências não recebem timeout por chamada. Esse limite controla a espera do driver e não garante um prazo estrito para a chamada inteira. O TCC previa consulta de tempo transcorrido, mas a API atual do temporizador oferece `hal_timer_config` e `hal_timer_start`; não inferir `hal_timer_get_millis` a partir do teste antigo.
-7. Não suponha concorrência segura ou chamadas de HAL em ISR sem autorização explícita do contrato. O callback do temporizador ocorre em interrupção e deve ser curto e não bloqueante. A integração coordena o acesso concorrente; a proposta atribui à aplicação a serialização do I2C compartilhado. A construção dos objetos e o acesso à arena são sequenciais em contexto normal de execução.
+- Mantenha `hal_memory.c` e `hal_memory.h` na raiz de `memory/`, sem restaurar `src/` ou `include/`. O nome continua `memory`, com prefixo `hal_memory_*`.
+- É um submódulo Git reutilizável, visando ESP32, nRF52840 e STM32F411/STM32F407; o porte STM32F4 comum às duas STM32 permanece uma intenção, não suporte já implementado.
+- Use C11 ou posterior para `max_align_t`, `_Alignas` e `_Alignof`. A integração fornece um buffer externo persistente alinhado para `max_align_t` e escolhe sua capacidade; o módulo não define esse buffer.
+- Há **um singleton privado no módulo de memória**, compartilhado entre todos os periféricos. `hal_memory_t` não é público nem pertence a `hal_system.c`; os portes chamam a API `hal_memory_*` diretamente. Não restaure uma arena por periférico nem os wrappers `hal_esp32_memory_require_open` e `hal_esp32_memory_alloc`.
+- API: `hal_memory_init`, `hal_memory_alloc`, `hal_memory_seal`, `hal_memory_get_info`, com `hal_memory_status_t` independente de `hal_status_t`. Uma segunda inicialização após sucesso retorna `HAL_MEMORY_INVALID_STATE`, inclusive depois da selagem, sem alterar objetos vivos.
+- Não restaure `HAL_MEMORY_INITIALIZER`, a exigência de zerar um contexto externo ou `heap_3_free`. Não há `free`, reset ou reabertura; selar é idempotente e impede novas reservas.
+- A reserva preserva alinhamento para `max_align_t`, inclui preenchimento no consumo e não zera o bloco. Alinhamentos estendidos não são atendidos. Tamanho zero é inválido; falhas limpam a saída válida para `NULL` e não consomem espaço. Preserve as verificações contra overflow.
+- Receba a reserva em uma variável `void *` e depois atribua ao ponteiro tipado; não converta `hal_gpio_t **` em `void **`. `used` inclui preenchimento e `remaining` não garante que uma reserva desse tamanho caiba após alinhamento.
+- A arena é usada sequencialmente durante construção, sem mutex ou dependência de RTOS. A memória interna usada pelos drivers do SDK é separada dela.
 
-## Arena compartilhada pelos portes
+## Temporização e contratos observáveis
 
-`hal/memory/` é um submódulo Git reutilizável entre ESP32, nRF52840 e o porte STM32F4 comum a STM32F411/STM32F407. O nome vigente continua sendo `memory`, com prefixo `hal_memory_*`; os arquivos `hal_memory.c` e `hal_memory.h` ficam diretamente na raiz desse diretório. Consulte o cabeçalho para os contratos completos.
+- A HAL permite configurar um timer com período de **1 ms**. A integração pode contar notificações e fornecer essa contagem aos componentes/aplicações; não invente `hal_timer_get_millis`, ausente do contrato atual.
+- O callback executa em interrupção: mantenha-o curto e não bloqueante. Sincronize a contagem compartilhada; no ESP32, respeite as exigências de IRAM e de operações atômicas sem bloqueio quando aplicáveis. A contagem representa notificações atendidas e pode subestimar tempo físico por latência/aglutinação.
+- Intervalos e deadlines de aplicação devem considerar o wrap do contador de `uint32_t`, usando diferenças sem sinal. O mecanismo de tempo chega por injeção de dependência, como `get_ticks`, sem acesso direto ao SDK.
+- I2C e UART têm timeout positivo em milissegundos definido na construção. Esse limite governa a espera do driver, não um prazo rígido para a chamada inteira. Processamento cooperativo não torna transferências síncronas assíncronas.
 
-- **Padrão e representação:** foi adotado C11 ou posterior para usar `max_align_t`, `_Alignas` e `_Alignof`. Capacidades, tamanhos, consumo e cálculos internos usam `uint32_t`, por decisão do usuário, em vez de `size_t`. A seleção do padrão nos diferentes sistemas de compilação pertence à integração.
-- **Instâncias e armazenamento:** a integração fornece um `hal_memory_t` e um buffer externo alinhado para `max_align_t`, com duração suficiente para todos os objetos em uso. O módulo não define buffer global nem escolhe sua capacidade. Os tipos concretos dos periféricos ficam no porte; aplicação e componentes recebem somente handles.
-- **API pública:** `hal_memory_init`, `hal_memory_alloc`, `hal_memory_seal` e `hal_memory_get_info`. Os retornos usam `hal_memory_status_t`, independente de `hal_status_t`; a tradução para o resultado da HAL cabe ao porte.
-- **Inicialização única:** `hal_memory_init` preenche todos os campos sem ler o conteúdo anterior do contexto. Não exigir `{0}` antes dessa chamada e não restaurar `HAL_MEMORY_INITIALIZER`, removido por solicitação do usuário. A integração garante que cada contexto seja inicializado com sucesso somente uma vez. Uma segunda chamada não é detectada: reinicia o consumo e remove a selagem, podendo sobrescrever objetos vivos. Depois de uma falha inicial, obter sucesso em `init` antes de consultar ou operar um contexto de conteúdo indeterminado.
-- **Reserva:** `hal_memory_alloc` insere preenchimento antes dos blocos e preserva o alinhamento para `max_align_t`; não atende tipos com alinhamento estendido. Não zera o conteúdo reservado. Tamanho zero é inválido, falhas deixam a saída em `NULL` quando válida e não consomem espaço. As verificações de capacidade devem continuar protegidas contra overflow. Receber a saída em uma variável `void *`, atribuindo-a depois ao ponteiro tipado; não converter `hal_gpio_t **` em `void **`.
-- **Vida útil:** não há `free`, reset ou reabertura no contrato. A selagem encerra as reservas, é idempotente e preserva os objetos existentes; reinicializar depois disso viola o contrato. Não adicionar mutexes ou dependência de RTOS para o cenário atual de construção sequencial.
-- **Consumo e falhas:** `hal_memory_info_t.used` inclui preenchimentos consumidos; `remaining` é `capacity - used`, e a próxima reserva ainda pode exigir alinhamento. Falha do construtor depois de uma reserva bem-sucedida pode consumir espaço, conforme a HAL, mesmo que o SDK falhe. Isso difere de uma reserva que falha, a qual preserva o consumo. O armazenamento interno dos drivers do SDK permanece separado dessa arena.
-- **Organização e documentação:** o módulo atual contém somente os arquivos `.c` e `.h`; não pressupor CMake, README ou suíte de testes presentes. A pasta `tests/` foi removida por solicitação do usuário. Nos enums e campos das estruturas deste módulo, usar comentários na própria linha começando com `/**`, sem `<`, como em `hal_memory_info_t`.
+## Estado de referência da implementação
 
-## Estado desta árvore
+Este retrato contextualiza as decisões; confira os arquivos antes de assumir APIs ou funcionalidades.
 
-O projeto atual contém os submódulos `hal/interface/`, `hal/memory/` e `hal/ports/esp32-wroom-32/`, além de `bsp/bsp_esp32.c` e `main/main.c`. A arena já está implementada, mas o porte ESP32 contém apenas um README: sua integração com os construtores ainda precisa ser feita. O BSP e `main` usam formas de uma API anterior, incluindo objetos por valor e consulta de milissegundos, e precisam ser adaptados aos contratos atuais. `main/main.c` concentra a prova inicial com SHT31-D/SSD1306 e chamadas diretas do FreeRTOS. `app/` e `components/` ainda não existem nesta árvore. Redistribuir essas responsabilidades ao evoluir para a arquitetura proposta, sem tratar o teste atual como desenho final.
+- Há implementações de GPIO, I2C, UART, timer e sistema em `hal/ports/esp32-wroom-32/`; o BSP atual está em `bsp/esp32_devkit_v1/`, com interface `bsp/bsp.h`.
+- Componentes presentes: `button`, `led`, `sht31d`, `ssd1306` e `telemetry`. O **próprio botão** já faz debounce, com padrão de 30 ms e fonte de tempo injetada; a aplicação apenas detecta um acionamento por pressão. Não adicione outro filtro baseado na descrição antiga do TCC.
+- SHT31-D: aquisição single-shot e validação CRC; a aplicação espera ao menos `SHT31D_MEASUREMENT_TIME` após o retorno do comando de início, preserva a última amostra válida e decide quando repetir. Leituras usam 0,001 °C e 0,001 %RH.
+- SSD1306: framebuffer 128×64, fontes e primitivas gráficas. A política visual fica na aplicação; a atualização normal do componente transfere no máximo uma página por chamada. A inicialização do controlador pode realizar várias transferências.
+- `apps/` contém coordenação (`app_init`, `app_process`, `app_get_state`), aquisição, botão, interface, indicação e telemetria. A tela principal destaca temperatura e umidade (opção B); a segunda mostra última aquisição e tempo ativo. O LED fica apagado no startup, aceso quando saudável e pisca em falhas. A aplicação mantém uma fila limitada de erros e não repete automaticamente um registro UART parcialmente transmitido.
+- `main/main.c` é a raiz de composição e execução cooperativa. Sensor e display compartilham I2C; UART0 em GPIO1/3 foi reservada à HAL, com console do SDK desativado em `sdkconfig.defaults`.
+
+## Compilação e manutenção
+
+- O SDK escolhido para este projeto é **ESP-IDF 6.1.x**, substituindo a escolha anterior de 5.3.6/`latest`. Não altere essa versão por inferência.
+- Centralize fontes, includes e dependências no **`CMakeLists.txt` da raiz**. Não crie `CMakeLists.txt` em cada subpasta. Registre novos módulos no arquivo central.
+- Os comandos do projeto estão em `scripts/build.py`, `clean.py`, `upload.py` e `monitor_serial.py`, com utilitários em `_common.py`. Use o ambiente ESP-IDF ativado por `export.sh`/`export.ps1`; a ativação depende das ferramentas e do ambiente Python do SDK estarem instalados.
+- HAL pública, memória, porte ESP32 e componentes são submódulos Git: preserve alterações locais e confira o repositório afetado antes de modificar contratos. Não transforme uma mudança de código em atualização/publicação de submódulos sem escopo para isso.

@@ -1,0 +1,17 @@
+{
+  "people": [
+    "Fabricio Santos"
+  ],
+  "projects": [
+    "interface",
+    "esp32_framework",
+    "esp32-wroom-32",
+    "memory",
+    "sht31d",
+    "ssd1306",
+    "button",
+    "led",
+    "telemetry"
+  ],
+  "topics": []
+}

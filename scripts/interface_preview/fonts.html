@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Números das fontes da interface</title>
+<style>
+  :root { color-scheme: dark; --zoom: 4; font: 16px/1.5 system-ui, sans-serif; background: #111315; color: #edf0f2; }
+  * { box-sizing: border-box; }
+  body { max-width: 1400px; margin: 0 auto; padding: 40px 24px; }
+  h1 { font-size: clamp(24px, 4vw, 36px); line-height: 1.2; margin: 0 0 12px; }
+  p { color: #b4bdc6; margin: 0; max-width: 76ch; }
+  .zoom { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; margin: 28px 0 36px; }
+  input { width: min(300px, 100%); accent-color: #9ac8ff; }
+  output { font-variant-numeric: tabular-nums; min-width: 3ch; }
+  section { margin: 0 0 40px; }
+  header { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+  h2 { font-size: 20px; margin: 0; }
+  .metrics { color: #b4bdc6; font-size: 14px; font-weight: normal; margin-left: 12px; }
+  a { color: #9ac8ff; text-underline-offset: 3px; }
+  .digits { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 12px; }
+  figure { margin: 0; flex: 1 0 auto; min-width: 76px; border: 1px solid #353b42; border-radius: 8px; background: #191c20; text-align: center; }
+  figcaption { padding: 8px; border-bottom: 1px solid #353b42; font-variant-numeric: tabular-nums; }
+  .glyph { display: flex; justify-content: center; align-items: center; padding: 14px; background: #000; }
+  img { display: block; image-rendering: pixelated; width: calc(var(--width) * var(--zoom) * 1px); height: calc(var(--height) * var(--zoom) * 1px); }
+  .size { padding: 6px; font: 12px/1.5 ui-monospace, monospace; color: #b4bdc6; }
+</style>
+<h1>Números das fontes da interface</h1>
+<p>Dígitos de 0 a 9 renderizados pelo componente SSD1306 com os mesmos bitmaps usados no OLED. A ampliação repete os pixels, sem suavização. As medidas abaixo são as dimensões originais de cada glifo.</p>
+<div class="zoom">
+  <label for="zoom">Ampliação</label>
+  <input id="zoom" type="range" min="1" max="12" value="4">
+  <output for="zoom" id="scale">4×</output>
+</div>
+<main id="fonts"></main>
+<script>
+  const fonts = __FONT_DATA__;
+  const main = document.getElementById('fonts');
+  for (const font of fonts) {
+    const section = document.createElement('section');
+    const header = document.createElement('header');
+    const heading = document.createElement('h2');
+    heading.textContent = font.name;
+    const metrics = document.createElement('span');
+    metrics.className = 'metrics';
+    metrics.textContent = `SSD1306_FONT_${font.name} · ${font.height} px de altura`;
+    heading.append(metrics);
+    const link = document.createElement('a');
+    link.href = font.strip;
+    link.download = font.strip;
+    link.textContent = 'Baixar faixa em PNG · 8×';
+    header.append(heading, link);
+    const digits = document.createElement('div');
+    digits.className = 'digits';
+    for (const digit of font.digits) {
+      const figure = document.createElement('figure');
+      const caption = document.createElement('figcaption');
+      caption.textContent = digit.digit;
+      const glyph = document.createElement('div');
+      glyph.className = 'glyph';
+      const image = document.createElement('img');
+      image.src = digit.image;
+      image.alt = `Dígito ${digit.digit}, fonte ${font.name}`;
+      image.style.setProperty('--width', digit.width);
+      image.style.setProperty('--height', digit.height);
+      glyph.append(image);
+      const size = document.createElement('div');
+      size.className = 'size';
+      size.textContent = `${digit.width} × ${digit.height} px`;
+      figure.append(caption, glyph, size);
+      digits.append(figure);
+    }
+    section.append(header, digits);
+    main.append(section);
+  }
+  document.getElementById('zoom').addEventListener('input', (event) => {
+    document.documentElement.style.setProperty('--zoom', event.target.value);
+    document.getElementById('scale').textContent = `${event.target.value}×`;
+  });
+</script>
+</html>

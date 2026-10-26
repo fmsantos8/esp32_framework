@@ -18,7 +18,7 @@ extern "C" {
 void app_button_init(void);
 
 /**
- * @brief Read the button state and detect a valid press.
+ * @brief Toggle the GUI screen on each valid button press after initialization.
  *
  * @param[in,out] button Initialized button component; use the same instance between calls.
  */

@@ -54,8 +54,8 @@ static ssd1306_status_t draw_readings(ssd1306_t *display, const gui_frame_t *fra
         int64_t value = frame->acquisition.sample.temperature;
         uint32_t magnitude = (uint32_t)(((value < 0 ? -value : value) + 50) / 100);
         uint32_t rh = (frame->acquisition.sample.humidity + 50U) / 100U;
-        snprintf(temperature, sizeof(temperature), "%s%lu,%lu", value < 0 && magnitude != 0 ? "-" : "", (uint32_t)(magnitude / 10U), (uint32_t)(magnitude % 10U));
-        snprintf(humidity, sizeof(humidity), "%lu,%lu", (uint32_t)(rh / 10U), (uint32_t)(rh % 10U));
+        snprintf(temperature, sizeof(temperature), "%s%lu,%lu", value < 0 && magnitude != 0 ? "-" : "", (unsigned long)(magnitude / 10U), (unsigned long)(magnitude % 10U));
+        snprintf(humidity, sizeof(humidity), "%lu,%lu", (unsigned long)(rh / 10U), (unsigned long)(rh % 10U));
     }
     DRAW_TRY(draw_header(display, frame, "TEMPERATURA"));
     DRAW_TRY(cmp_ssd1306_draw_bitmap(display, 6, 22, get_thermometer_bitmap()));
@@ -91,10 +91,10 @@ static ssd1306_status_t draw_diagnostics(ssd1306_t *display, const gui_frame_t *
     uint64_t days = seconds / 86400U;
     char uptime_text[24];
     if (days == 0) {
-        snprintf(uptime_text, sizeof(uptime_text), "%02lu:%02lu:%02lu", (uint32_t)(seconds / 3600U), (uint32_t)(seconds / 60U % 60U), (uint32_t)(seconds % 60U));
+        snprintf(uptime_text, sizeof(uptime_text), "%02lu:%02lu:%02lu", (unsigned long)(seconds / 3600U), (unsigned long)(seconds / 60U % 60U), (unsigned long)(seconds % 60U));
     } else {
         uint32_t shown_days = days > 9999999U ? 9999999U : (uint32_t)days;
-        snprintf(uptime_text, sizeof(uptime_text), "%lu%s %02lu:%02lu:%02lu", (uint32_t)shown_days, days > 9999999U ? "+" : "d", (uint32_t)(seconds / 3600U % 24U), (uint32_t)(seconds / 60U % 60U), (uint32_t)(seconds % 60U));
+        snprintf(uptime_text, sizeof(uptime_text), "%lu%s %02lu:%02lu:%02lu", (unsigned long)shown_days, days > 9999999U ? "+" : "d", (unsigned long)(seconds / 3600U % 24U), (unsigned long)(seconds / 60U % 60U), (unsigned long)(seconds % 60U));
     }
     DRAW_TRY(draw_header(display, frame, "DIAGNOSTICO"));
     DRAW_TRY(cmp_ssd1306_draw_text(display, 6, 18, "ULTIMA AQUISICAO", SSD1306_FONT_SMALL));

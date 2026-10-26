@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Prévia do display · ESP32 Framework</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: system-ui, sans-serif;
+      color: #24292c;
+      background: #f5f6f7;
+      accent-color: #225ac5;
+      --zoom: 4;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    main { max-width: 1440px; margin: auto; padding: 48px 40px; }
+    h1 { font-size: clamp(26px, 4vw, 36px); line-height: 1.2; margin: 0 0 14px; letter-spacing: -.025em; }
+    h2 { font-size: 18px; margin: 0 0 16px; font-weight: 600; }
+    p { max-width: 72ch; line-height: 1.6; margin: 0; }
+    .intro { color: #4d565e; }
+    .toolbar { display: flex; gap: 24px; flex-wrap: wrap; align-items: end; margin: 32px 0 20px; }
+    label { display: grid; gap: 8px; font-size: 14px; font-weight: 600; }
+    select, button {
+      font: inherit; color: inherit; background: white; border: 1px solid #a6afb8;
+      border-radius: 6px; min-height: 44px; padding: 9px 12px;
+    }
+    select { max-width: 100%; cursor: pointer; }
+    .scenario-control { max-width: 100%; }
+    button { cursor: pointer; }
+    button:hover, select:hover { border-color: #225ac5; }
+    button:active { background: #e8eefb; }
+    :focus-visible { outline: 3px solid #225ac5; outline-offset: 4px; }
+    ::selection { background: #c9dcff; color: #142647; }
+    .description { min-height: 52px; color: #4d565e; font-size: 14px; }
+    .screens { display: flex; flex-wrap: wrap; gap: 32px; margin: 18px 0 28px; }
+    figure { margin: 0; min-width: 0; max-width: 100%; }
+    .panel { background: #000; padding: 16px; border-radius: 8px; width: max-content; max-width: 100%; }
+    .panel img {
+      display: block; width: calc(128px * var(--zoom)); max-width: 100%; height: auto;
+      image-rendering: pixelated; aspect-ratio: 2 / 1;
+    }
+    figcaption { margin-top: 12px; font-size: 13px; color: #4d565e; }
+    .explanation { border-top: 1px solid #cbd0d6; padding-top: 22px; font-size: 14px; color: #4d565e; }
+    .explanation p + p { margin-top: 8px; }
+    code { font-size: .92em; color: #24292c; overflow-wrap: anywhere; }
+    @media (max-width: 600px) {
+      main { padding: 28px 20px; }
+      .toolbar { gap: 16px; margin-top: 24px; }
+      .scenario-control { width: 100%; }
+      .panel { padding: 12px; }
+      .screens { gap: 28px; }
+      .description { min-height: 0; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Prévia do display</h1>
+    <p class="intro">As duas telas do monitor ambiental, com os mesmos pixels, ícones e fontes do firmware. OLED monocromático de 128 × 64 pixels.</p>
+    <div class="toolbar">
+      <label class="scenario-control" for="scenario">Cenário de demonstração
+        <select id="scenario"></select>
+      </label>
+      <label for="zoom">Ampliação
+        <select id="zoom">
+          <option value="1">1× · 128 × 64</option>
+          <option value="2">2× · 256 × 128</option>
+          <option value="4" selected>4× · 512 × 256</option>
+        </select>
+      </label>
+      <button id="next" type="button">Próximo cenário</button>
+    </div>
+    <p class="description" id="description" role="status"></p>
+    <div class="screens">
+      <figure>
+        <h2>Leituras</h2>
+        <div class="panel"><img id="readings" width="512" height="256" alt=""></div>
+        <figcaption>Temperatura em destaque e umidade relativa.</figcaption>
+      </figure>
+      <figure>
+        <h2>Diagnóstico</h2>
+        <div class="panel"><img id="diagnostics" width="512" height="256" alt=""></div>
+        <figcaption>Resultado da última aquisição e tempo ativo.</figcaption>
+      </figure>
+    </div>
+    <div class="explanation">
+      <p>Na placa, cada pressão do botão alterna entre estas duas telas. Aqui, elas aparecem lado a lado para facilitar a comparação. Os traços no canto superior direito indicam a tela selecionada.</p>
+      <p>Dados simulados, sem conexão com o sensor. Esta prévia mostra quadros completos; não reproduz a luminosidade física do OLED nem o tempo de transferência por I2C.</p>
+      <p>Após alterar a interface, atualize a prévia com <code>python3 scripts/preview_interface.py</code> e recarregue esta página.</p>
+    </div>
+    <noscript><p>Ative o JavaScript para selecionar os cenários ou abra readings.png e diagnostics.png na pasta desta prévia.</p></noscript>
+  </main>
+  <script>
+    const cases = __PREVIEW_DATA__;
+    const scenario = document.getElementById('scenario');
+    const description = document.getElementById('description');
+    const readings = document.getElementById('readings');
+    const diagnostics = document.getElementById('diagnostics');
+    const statusLabels = {ok: 'OK', crc: 'ERRO CRC', timeout: 'TIMEOUT', i2c: 'ERRO I2C', unavailable: 'INDISPONIVEL'};
+    for (const item of cases) {
+      const option = document.createElement('option');
+      option.value = item.id;
+      option.textContent = item.label;
+      scenario.append(option);
+    }
+    const format = value => (value / 1000).toLocaleString('pt-BR', {minimumFractionDigits: 1, maximumFractionDigits: 1});
+    function update() {
+      const item = cases[scenario.selectedIndex];
+      description.textContent = item.description;
+      readings.src = item.readings;
+      readings.alt = item.sample
+        ? `Tela de leituras: ${format(item.temperature)} °C, ${format(item.humidity)} % de umidade${item.fault ? ', com indicador de falha' : ''}.`
+        : `Tela de leituras sem amostra válida${item.fault ? ', com indicador de falha' : ''}.`;
+      diagnostics.src = item.diagnostics;
+      const seconds = Math.floor(item.uptime / 1000);
+      const days = Math.floor(seconds / 86400);
+      const clock = [Math.floor(seconds / 3600) % 24, Math.floor(seconds / 60) % 60, seconds % 60]
+        .map(part => String(part).padStart(2, '0')).join(':');
+      diagnostics.alt = `Tela de diagnóstico: última aquisição ${item.attempted ? statusLabels[item.status] : 'AGUARDANDO'}. Tempo ativo: ${days} dias, ${clock}.`;
+    }
+    scenario.addEventListener('change', update);
+    document.getElementById('zoom').addEventListener('change', event => {
+      document.documentElement.style.setProperty('--zoom', event.target.value);
+    });
+    document.getElementById('next').addEventListener('click', () => {
+      scenario.selectedIndex = (scenario.selectedIndex + 1) % cases.length;
+      update();
+    });
+    update();
+  </script>
+</body>
+</html>

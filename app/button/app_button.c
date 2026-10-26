@@ -4,15 +4,23 @@
  * @brief Detects valid button presses.
  */
 #include "app_button.h"
+#include "gui/app_gui.h"
 
 #include <stddef.h>
 
+static bool previous_pressed = false; /** Last valid button state. */
+static bool initialized = false;      /** True after task initialization. */
+
+void app_button_init(void) {
+    previous_pressed = false;
+    initialized = true;
+}
+
 void app_button_run(button_t *button) {
-    if (button == NULL) {
+    if (!initialized || button == NULL) {
         return;
     }
 
-    static bool previous_pressed = false;
     bool pressed = false;
     // Keep the last valid edge state during a read failure.
     if (cmp_button_read(button, &pressed) != BUTTON_STATUS_OK) {
@@ -22,6 +30,6 @@ void app_button_run(button_t *button) {
     const bool press_event = pressed && !previous_pressed;
     previous_pressed = pressed;
     if (press_event) {
-        // TODO: Alternate the screen
+        app_gui_toggle_screen();
     }
 }

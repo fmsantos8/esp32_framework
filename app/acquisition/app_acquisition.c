@@ -5,6 +5,7 @@
  */
 #include "app_acquisition.h"
 #include "status_led/app_status_led.h"
+#include "telemetry/app_telemetry.h"
 
 #include <stddef.h>
 
@@ -34,6 +35,15 @@ static void publish_acquisition(sht31d_status_t status) {
     }
     result_available = true;
     app_status_led_set_i2c_error(APP_STATUS_LED_I2C_SENSOR, last_result.i2c_error);
+    if (status == SHT31D_STATUS_OK) {
+        const telemetry_sample_t sample = {
+            .temperature = last_result.sample.temperature,
+            .humidity = last_result.sample.humidity,
+        };
+        app_telemetry_report_sample(&sample);
+    } else {
+        app_telemetry_report_error(APP_TELEMETRY_SOURCE_SENSOR, (int32_t)status);
+    }
 }
 
 bool app_acquisition_init(uint32_t (*get_ticks_function)(void)) {

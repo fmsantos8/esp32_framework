@@ -10,6 +10,7 @@
 #include "acquisition/app_acquisition.h"
 #include "render.h"
 #include "status_led/app_status_led.h"
+#include "telemetry/app_telemetry.h"
 
 #define RETRY_INTERVAL 1000U /** Delay after a failed display operation, in milliseconds. */
 
@@ -104,6 +105,7 @@ void app_gui_run(ssd1306_t *display) {
     waiting_retry = status != SSD1306_STATUS_OK;
     if (waiting_retry) {
         retry_since = get_ticks();
+        app_telemetry_report_error(APP_TELEMETRY_SOURCE_DISPLAY, (int32_t)status);
         if (status == SSD1306_STATUS_TIMEOUT || status == SSD1306_STATUS_COMMUNICATION_ERROR) {
             app_status_led_set_i2c_error(APP_STATUS_LED_I2C_DISPLAY, true);
         }

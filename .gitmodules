@@ -22,3 +22,6 @@
 [submodule "components/telemetry"]
 	path = src/components/telemetry
 	url = git@github.com:fmsantos8/telemetry.git
+[submodule "framework_app"]
+	path = src/app
+	url = git@github.com:fmsantos8/framework_app.git

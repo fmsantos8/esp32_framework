@@ -1,5 +1,4 @@
 #include <assert.h>
-#include <stdatomic.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -27,7 +26,7 @@
 #define HAL_STORAGE_CAPACITY 1024U /** HAL Memory Arena Storage (bytes) */
 
 static _Alignas(max_align_t) unsigned char hal_storage[HAL_STORAGE_CAPACITY]; /** Shared HAL arena storage. */
-static _Atomic uint32_t timer_notifications = 0;                              /** Serviced one-millisecond timer notifications. */
+static volatile uint32_t tick_counter = 0;                                    /** Single ISR writer; read only by the main task on the same core. */
 
 static bsp_resources_t board; /** Resources constructed by the selected board. */
 static led_t led;             /** Status LED component context. */
@@ -36,14 +35,12 @@ static button_t button;       /** Button component context. */
 static sht31d_t sensor;       /** Sensor component context. */
 static ssd1306_t display;     /** Display component context and framebuffer. */
 
-_Static_assert(ATOMIC_INT_LOCK_FREE == 2, "Timer callback requires a lock-free counter");
-
 static void IRAM_ATTR timer_tick(void) {
-    atomic_fetch_add_explicit(&timer_notifications, 1, memory_order_relaxed);
+    tick_counter++;
 }
 
 static uint32_t get_ticks(void) {
-    return atomic_load_explicit(&timer_notifications, memory_order_relaxed);
+    return tick_counter;
 }
 
 static void init_platform(void) {
@@ -112,6 +109,5 @@ void app_main(void) {
         app_gui_run(&display);
         app_status_led_run(&led);
         app_telemetry_run(&telemetry);
-        vTaskDelay(1);
     }
 }

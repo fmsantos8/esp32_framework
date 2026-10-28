@@ -1,0 +1,4 @@
+CONFIG_ESP_CONSOLE_NONE=y
+
+# Keep the timer ISR and the application reads on the core that constructs it.
+CONFIG_ESP_MAIN_TASK_AFFINITY_CPU0=y

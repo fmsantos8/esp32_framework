@@ -7,8 +7,8 @@
       "intelliSenseMode": "linux-gcc-x86",
       "includePath": [
         "${workspaceFolder}/build/config",
-        "${workspaceFolder}/hal/interface",
-        "${workspaceFolder}/hal/ports/esp32-wroom-32",
+        "${workspaceFolder}/src/hal/interface",
+        "${workspaceFolder}/src/hal/ports/esp32-wroom-32",
         "${config:idf.currentSetup}/components/**",
         "${workspaceFolder}/**"
       ],

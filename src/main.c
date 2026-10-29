@@ -47,6 +47,7 @@ static void init_platform(void) {
     const hal_system_config_t system_config = {
         .memory_buffer = hal_storage,
         .memory_capacity = (uint32_t)sizeof(hal_storage),
+        .cpu_clock = 160000000U,
     };
     assert(hal_system_init(&system_config) == HAL_STATUS_OK);
 

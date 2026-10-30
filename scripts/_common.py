@@ -70,7 +70,37 @@ def python_executable():
     return sys.executable
 
 
+def activate_idf_environment():
+    """Load the installed EIM environment when running from a regular terminal."""
+    if os.environ.get("IDF_PATH") or shutil.which("idf.py"):
+        return
+    if os.name == "nt":
+        return
+
+    tools = Path(os.environ.get("IDF_TOOLS_PATH", Path.home() / ".espressif" / "tools"))
+    activation = tools / "activate_idf_v6.1.sh"
+    if not activation.is_file():
+        return
+
+    print(f"Ativando ESP-IDF: {activation}", flush=True)
+    # Pass paths as positional arguments, keeping spaces and shell metacharacters safe.
+    result = subprocess.run(
+        ["bash", "-c", '. "$1" >&2 && "$2" -c '
+         "'import json, os; print(json.dumps(dict(os.environ)))'",
+         "bash", str(activation), sys.executable],
+        capture_output=True, text=True, check=False,
+    )
+    if result.returncode:
+        raise ValueError(f"Falha ao ativar ESP-IDF: {result.stderr.strip()}")
+    try:
+        environment = json.loads(result.stdout)
+    except ValueError as error:
+        raise ValueError("O script de ativação retornou um ambiente inválido.") from error
+    os.environ.update(environment)
+
+
 def idf_command():
+    activate_idf_environment()
     sdk = os.environ.get("IDF_PATH")
     executable = str(Path(sdk) / "tools" / "idf.py") if sdk else shutil.which("idf.py")
     if not executable or not Path(executable).is_file():

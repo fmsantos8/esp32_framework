@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the ESP32 firmware with an activated ESP-IDF 6.1 environment."""
+"""Build the ESP32 firmware, activating an installed EIM environment if needed."""
 
 import argparse
 import time

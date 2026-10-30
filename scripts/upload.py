@@ -5,9 +5,10 @@ import argparse
 import json
 import os
 from pathlib import Path
+import sys
 
 from _common import (
-    add_build_argument, add_port_argument, entrypoint, positive_integer,
+    activate_idf_environment, add_build_argument, add_port_argument, entrypoint, positive_integer,
     python_executable, read_build_description, run_command, serial_port,
 )
 
@@ -27,6 +28,12 @@ def main():
     parser.add_argument("--no-monitor", action="store_true", help="Encerra após gravar o firmware.")
     args = parser.parse_args()
 
+    activate_idf_environment()
+    python = python_executable()
+    if python != sys.executable:
+        # Port detection also needs pyserial from the ESP-IDF virtual environment.
+        return run_command([python, Path(__file__).resolve(), *sys.argv[1:]])
+
     description = read_build_description(args.build_dir)
     if description.get("target") != "esp32":
         raise ValueError("O build informado não foi gerado para ESP32.")
@@ -45,7 +52,6 @@ def main():
             raise ValueError(f"Binário não encontrado: {name}. Execute scripts/build.py primeiro.")
 
     port = serial_port(args)
-    python = python_executable()
     command = [
         python, "-m", "esptool", "--chip", "esp32", "--port", port,
         "--baud", str(args.baud), "--before", extra.get("before", "default-reset"),

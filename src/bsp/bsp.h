@@ -12,6 +12,7 @@
 #include "common/hal_status.h"
 #include "gpio/hal_gpio.h"
 #include "i2c/hal_i2c.h"
+#include "system/hal_system.h"
 #include "timer/hal_timer.h"
 #include "uart/hal_uart.h"
 

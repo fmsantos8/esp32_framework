@@ -23,17 +23,14 @@
 #error "This firmware requires assertions to be enabled"
 #endif
 
-#define HAL_STORAGE_CAPACITY 1024U /** HAL Memory Arena Storage (bytes) */
+static volatile uint32_t tick_counter = 0; /** Single ISR writer; read only by the main task on the same core. */
 
-static _Alignas(max_align_t) unsigned char hal_storage[HAL_STORAGE_CAPACITY]; /** Shared HAL arena storage. */
-static volatile uint32_t tick_counter = 0;                                    /** Single ISR writer; read only by the main task on the same core. */
-
-static bsp_resources_t board; /** Resources constructed by the selected board. */
-static led_t led;             /** Status LED component context. */
-static telemetry_t telemetry; /** UART telemetry component context. */
-static button_t button;       /** Button component context. */
-static sht31d_t sensor;       /** Sensor component context. */
-static ssd1306_t display;     /** Display component context and framebuffer. */
+static bsp_resources_t board = {0}; /** Resources constructed by the selected board. */
+static led_t led = {0};             /** Status LED component context. */
+static telemetry_t telemetry = {0}; /** UART telemetry component context. */
+static button_t button = {0};       /** Button component context. */
+static sht31d_t sensor = {0};       /** Sensor component context. */
+static ssd1306_t display = {0};     /** Display component context and framebuffer. */
 
 static void IRAM_ATTR timer_tick(void) {
     tick_counter++;
@@ -41,18 +38,6 @@ static void IRAM_ATTR timer_tick(void) {
 
 static uint32_t get_ticks(void) {
     return tick_counter;
-}
-
-static void init_platform(void) {
-    const hal_system_config_t system_config = {
-        .memory_buffer = hal_storage,
-        .memory_capacity = (uint32_t)sizeof(hal_storage),
-        .cpu_clock = 160000000U,
-    };
-    assert(hal_system_init(&system_config) == HAL_STATUS_OK);
-
-    assert(bsp_init(timer_tick, &board) == HAL_STATUS_OK);
-    assert(hal_system_seal() == HAL_STATUS_OK);
 }
 
 static void init_components(void) {
@@ -96,7 +81,9 @@ static void init_application(void) {
 }
 
 void app_main(void) {
-    init_platform();
+
+    assert(bsp_init(timer_tick, &board) == HAL_STATUS_OK);
+
     init_components();
     init_application();
 

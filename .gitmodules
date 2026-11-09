@@ -1,27 +1,27 @@
 [submodule "hal_interface"]
 	path = src/hal/interface
-	url = git@github.com:fmsantos8/hal_interface.git
+	url = https://github.com/fmsantos8/hal_interface.git
 [submodule "hal/ports/esp32-wroom-32"]
 	path = src/hal/ports/esp32-wroom-32
-	url = git@github.com:fmsantos8/esp32-wroom-32.git
+	url = https://github.com/fmsantos8/esp32-wroom-32.git
 [submodule "hal/memory"]
 	path = src/hal/memory
-	url = git@github.com:fmsantos8/memory.git
+	url = https://github.com/fmsantos8/memory.git
 [submodule "components/ssd1306"]
 	path = src/components/ssd1306
-	url = git@github.com:fmsantos8/ssd1306.git
+	url = https://github.com/fmsantos8/ssd1306.git
 [submodule "components/sht31d"]
 	path = src/components/sht31d
-	url = git@github.com:fmsantos8/sht31d.git
+	url = https://github.com/fmsantos8/sht31d.git
 [submodule "components/button"]
 	path = src/components/button
-	url = git@github.com:fmsantos8/button.git
+	url = https://github.com/fmsantos8/button.git
 [submodule "components/led"]
 	path = src/components/led
-	url = git@github.com:fmsantos8/led.git
+	url = https://github.com/fmsantos8/led.git
 [submodule "components/telemetry"]
 	path = src/components/telemetry
-	url = git@github.com:fmsantos8/telemetry.git
+	url = https://github.com/fmsantos8/telemetry.git
 [submodule "framework_app"]
 	path = src/app
-	url = git@github.com:fmsantos8/framework_app.git
+	url = https://github.com/fmsantos8/framework_app.git
